@@ -1,0 +1,473 @@
+{
+	"Abyssal Sire": {
+		"Unsired": 0.010000000000000009
+	},
+	"Alchemical Hydra": {
+		"Alchemical hydra heads": 0.00390625,
+		"Dragon knife": 0.000499750000000021,
+		"Dragon thrownaxe": 0.0004999999999999449,
+		"Hydra leather": 0.0019454141182794205,
+		"Hydra tail": 0.0019492211909180046,
+		"Hydra's claw": 0.0009990002499999928,
+		"Hydra's eye": 0.005522814524671071,
+		"Hydra's fang": 0.005522814524671071,
+		"Hydra's heart": 0.005522814524671071,
+		"Ikkle hydra": 0.0003333333333332966,
+		"Jar of chemicals": 0.0004999999999999449
+	},
+	"Amoxliatl": {
+		"Glacial temotli": 0.010000000000000009,
+		"Moxi": 0.0003333333333332966,
+		"Pendant of ates (inert)": 0.040000000000000036,
+		"Tooth half of key (moon key)": 0.008000000000000007
+	},
+	"Araxxor": {
+		"Araxyte fang": 0.0016666666666667052,
+		"Nid": 0.0003333333333332966,
+		"Noxious blade": 0.0050000000000000044,
+		"Noxious point": 0.0050000000000000044,
+		"Noxious pommel": 0.0050000000000000044
+	},
+	"Artio": {
+		"Callisto cub": 0.00035714285714283367,
+		"Claws of callisto": 0.0016181229773463146,
+		"Curved bone": 0.00019950124688283832,
+		"Dragon 2h sword": 0.0027932960893854997,
+		"Dragon pickaxe": 0.0027932960893854997,
+		"Long bone": 0.0024999999999999467,
+		"Looting bag": 0.33333333333333326,
+		"Tyrannical ring": 0.0013966480446927498,
+		"Voidwaker hilt": 0.0010964912280702066
+	},
+	"Barrows chest": {
+		"Ahrim's hood": 0.0028559752478257705,
+		"Ahrim's robeskirt": 0.0028559752478257705,
+		"Ahrim's robetop": 0.0028559752478257705,
+		"Ahrim's staff": 0.0028559752478257705,
+		"Dharok's greataxe": 0.0028559752478257705,
+		"Dharok's helm": 0.0028559752478257705,
+		"Dharok's platebody": 0.0028559752478257705,
+		"Dharok's platelegs": 0.0028559752478257705,
+		"Guthan's chainskirt": 0.0028559752478257705,
+		"Guthan's helm": 0.0028559752478257705,
+		"Guthan's platebody": 0.0028559752478257705,
+		"Guthan's warspear": 0.0028559752478257705,
+		"Karil's coif": 0.0028559752478257705,
+		"Karil's crossbow": 0.0028559752478257705,
+		"Karil's leatherskirt": 0.0028559752478257705,
+		"Karil's leathertop": 0.0028559752478257705,
+		"Torag's hammers": 0.0028559752478257705,
+		"Torag's helm": 0.0028559752478257705,
+		"Torag's platebody": 0.0028559752478257705,
+		"Torag's platelegs": 0.0028559752478257705,
+		"Verac's brassard": 0.0028559752478257705,
+		"Verac's flail": 0.0028559752478257705,
+		"Verac's helm": 0.0028559752478257705,
+		"Verac's plateskirt": 0.0028559752478257705
+	},
+	"Black dragon": {
+		"Draconic visage": 9.999999999998899e-05,
+		"Ensouled dragon head": 0.02857142857142858,
+		"Looting bag": 0.33333333333333326
+	},
+	"Brutal black dragon": {
+		"Draconic visage": 9.999999999998899e-05,
+		"Dragon platelegs": 0.001953125,
+		"Dragon plateskirt": 0.001953125,
+		"Dragon spear": 0.001953125,
+		"Ensouled dragon head": 0.050000000000000044,
+		"Uncut dragonstone": 0.001953125
+	},
+	"Bryophyta": {
+		"Clue scroll (beginner)": 0.022222222222222254,
+		"Curved bone": 0.00019950124688283832,
+		"Ensouled giant head": 0.04166666666666663,
+		"Giant champion scroll": 0.00019999999999997797,
+		"Long bone": 0.0024999999999999467,
+		"Moss giant bone": 0.25
+	},
+	"Callisto": {
+		"Claws of callisto": 0.005102040816326481,
+		"Curved bone": 0.00019950124688283832,
+		"Dragon 2h sword": 0.00390625,
+		"Dragon pickaxe": 0.00390625,
+		"Long bone": 0.0024999999999999467,
+		"Looting bag": 0.33333333333333326,
+		"Tyrannical ring": 0.001953125,
+		"Voidwaker hilt": 0.002777777777777768
+	},
+	"Calvar'ion": {
+		"Curved bone": 0.00019950124688283832,
+		"Dragon 2h sword": 0.0027932960893854997,
+		"Dragon pickaxe": 0.0027932960893854997,
+		"Long bone": 0.0024999999999999467,
+		"Looting bag": 0.33333333333333326,
+		"Ring of the gods": 0.0013966480446927498,
+		"Skeleton champion scroll": 0.00019999999999997797,
+		"Skull of vet'ion": 0.0016181229773463146,
+		"Vet'ion jr.": 0.00035714285714283367,
+		"Voidwaker blade": 0.0010964912280702066
+	},
+	"Cerberus": {
+		"Ensouled hellhound head": 0.06666666666666665,
+		"Eternal crystal": 0.0019230769230769162,
+		"Hellpuppy": 0.0003333333333332966,
+		"Jar of souls": 0.0004999999999999449,
+		"Pegasian crystal": 0.0019230769230769162,
+		"Primordial crystal": 0.0019230769230769162,
+		"Smouldering stone": 0.0019230769230769162
+	},
+	"Chaos Elemental": {
+		"Dragon pickaxe": 0.00390625,
+		"Looting bag": 0.33333333333333326,
+		"Pet chaos elemental": 0.0033333333333332993,
+		"Weapon poison(++)": 0.078125
+	},
+	"Chaos Fanatic": {
+		"Looting bag": 0.33333333333333326,
+		"Malediction shard 1": 0.00390625,
+		"Odium shard 1": 0.00390625,
+		"Pet chaos elemental": 0.0010000000000000009
+	},
+	"Cockatrice": {
+		"Cockatrice head": 0.0010000000000000009
+	},
+	"Commander Zilyana": {
+		"Armadyl crossbow": 0.0019685039370078705,
+		"Godsword shard 1": 0.001312335958005284,
+		"Godsword shard 2": 0.001312335958005284,
+		"Godsword shard 3": 0.001312335958005284,
+		"Pet zilyana": 0.00019999999999997797,
+		"Saradomin hilt": 0.0019685039370078705,
+		"Saradomin sword": 0.007874015748031482,
+		"Saradomin's light": 0.003937007874015741
+	},
+	"Corporeal Beast": {
+		"Jar of spirits": 0.0010000000000000009,
+		"Pet dark core": 0.00019999999999997797
+	},
+	"Crazy archaeologist": {
+		"Fedora": 0.0078125,
+		"Looting bag": 0.33333333333333326,
+		"Malediction shard 2": 0.00390625,
+		"Odium shard 2": 0.00390625
+	},
+	"Dagannoth Prime": {
+		"Dagannoth ribs": 0.25,
+		"Ensouled dagannoth head": 0.050000000000000044,
+		"Pet dagannoth prime": 0.00019999999999997797
+	},
+	"Dagannoth Rex": {
+		"Dagannoth ribs": 0.25,
+		"Ensouled dagannoth head": 0.050000000000000044,
+		"Pet dagannoth rex": 0.00019999999999997797
+	},
+	"Dagannoth Supreme": {
+		"Dagannoth ribs": 0.25,
+		"Ensouled dagannoth head": 0.050000000000000044,
+		"Pet dagannoth supreme": 0.00019999999999997797
+	},
+	"Dark beast": {
+		"Crystal shard": 0.04166666666666663,
+		"Curved bone": 0.00019950124688283832,
+		"Dark bow": 0.001953125,
+		"Long bone": 0.0024999999999999467
+	},
+	"Deranged archaeologist": {
+		"Steel ring": 0.022900763358778664
+	},
+	"Doom of Mokhaiotl": {
+		"Avernic treads": 0.0007407407407407085,
+		"Eye of ayak (uncharged)": 0.0004999999999999449,
+		"Mokhaiotl cloth": 0.00039999999999995595
+	},
+	"Duke Sucellus": {
+		"Baron": 0.00039999999999995595,
+		"Chromium ingot": 0.004166666666666652,
+		"Eye of the duke": 0.001388888888888884,
+		"Magus vestige": 0.001388888888888884,
+		"Virtus mask": 0.0004629629629629983,
+		"Virtus robe bottom": 0.0004629629629629983,
+		"Virtus robe top": 0.0004629629629629983
+	},
+	"General Graardor": {
+		"Bandos boots": 0.002624671916010457,
+		"Bandos chestplate": 0.002624671916010457,
+		"Bandos hilt": 0.0019685039370078705,
+		"Bandos tassets": 0.002624671916010457,
+		"Curved bone": 0.00019950124688283832,
+		"Godsword shard 1": 0.001312335958005284,
+		"Godsword shard 2": 0.001312335958005284,
+		"Godsword shard 3": 0.001312335958005284,
+		"Long bone": 0.0024999999999999467,
+		"Pet general graardor": 0.00019999999999997797
+	},
+	"Giant Mole": {
+		"Baby mole": 0.0003333333333332966,
+		"Curved bone": 0.00019950124688283832,
+		"Immaculate mole skin": 0.020000000000000018,
+		"Long bone": 0.0024999999999999467
+	},
+	"Greater abyssal demon": {
+		"Abyssal head": 0.0001666666666666483
+	},
+	"Grotesque Guardians": {
+		"Black tourmaline core": 0.001998999999999973,
+		"Granite gloves": 0.0039959999999999996,
+		"Granite hammer": 0.002664888888888828,
+		"Granite maul": 0.007983999999999991,
+		"Granite ring": 0.0039959999999999996,
+		"Jar of stone": 0.00019999999999997797,
+		"Noon": 0.0003333333333332966
+	},
+	"Hespori": {
+		"Bottomless compost bucket": 0.02857142857142858
+	},
+	"Iron dragon": {
+		"Draconic visage": 9.999999999998899e-05,
+		"Dragon platelegs": 0.0009765625,
+		"Dragon plateskirt": 0.0009765625
+	},
+	"K'ril Tsutsaroth": {
+		"Godsword shard 1": 0.001312335958005284,
+		"Godsword shard 2": 0.001312335958005284,
+		"Godsword shard 3": 0.001312335958005284,
+		"Pet k'ril tsutsaroth": 0.00019999999999997797,
+		"Staff of the dead": 0.0019685039370078705,
+		"Steam battlestaff": 0.007874015748031482,
+		"Zamorak hilt": 0.0019685039370078705,
+		"Zamorakian spear": 0.007874015748031482
+	},
+	"Kalphite Queen": {
+		"Dragon 2h sword": 0.00390625,
+		"Dragon chainbody": 0.0078125,
+		"Dragon pickaxe": 0.0024999999999999467,
+		"Ensouled kalphite head": 0.050000000000000044,
+		"Jar of sand": 0.0004999999999999449,
+		"Kalphite princess": 0.0003333333333332966,
+		"Kq head": 0.0078125
+	},
+	"King Black Dragon": {
+		"Draconic visage": 0.00019999999999997797,
+		"Dragon pickaxe": 0.0010000000000000009,
+		"Kbd heads": 0.0078125,
+		"Prince black dragon": 0.0003333333333332966
+	},
+	"Kraken": {
+		"Jar of dirt": 0.0010000000000000009,
+		"Pet kraken": 0.0003333333333332966
+	},
+	"Kree'arra": {
+		"Armadyl chainskirt": 0.002624671916010457,
+		"Armadyl chestplate": 0.002624671916010457,
+		"Armadyl helmet": 0.002624671916010457,
+		"Armadyl hilt": 0.0019685039370078705,
+		"Curved bone": 0.00019950124688283832,
+		"Godsword shard 1": 0.001312335958005284,
+		"Godsword shard 2": 0.001312335958005284,
+		"Godsword shard 3": 0.001312335958005284,
+		"Long bone": 0.0024999999999999467,
+		"Pet kree'arra": 0.00019999999999997797
+	},
+	"Lunar Chest": {
+		"Blood moon chestplate": 0.004464285714285698,
+		"Blood moon helm": 0.004464285714285698,
+		"Blood moon tassets": 0.004464285714285698,
+		"Blue moon chestplate": 0.004464285714285698,
+		"Blue moon helm": 0.004464285714285698,
+		"Blue moon spear": 0.004464285714285698,
+		"Blue moon tassets": 0.004464285714285698,
+		"Dual macuahuitl": 0.004464285714285698,
+		"Eclipse atlatl": 0.004464285714285698,
+		"Eclipse moon chestplate": 0.004464285714285698,
+		"Eclipse moon helm": 0.004464285714285698,
+		"Eclipse moon tassets": 0.004464285714285698
+	},
+	"Mithril dragon": {
+		"Draconic visage": 9.999999999998899e-05
+	},
+	"Nex": {
+		"Ancient hilt": 0.0019379844961240345,
+		"Nexling": 0.0020000000000000018,
+		"Nihil horn": 0.003875968992248069,
+		"Torva full helm (damaged)": 0.003875968992248069,
+		"Torva platebody (damaged)": 0.003875968992248069,
+		"Torva platelegs (damaged)": 0.003875968992248069,
+		"Zaryte vambraces": 0.005813953488372103
+	},
+	"Obor": {
+		"Curved bone": 0.00019950124688283832,
+		"Ensouled giant head": 0.040000000000000036,
+		"Giant champion scroll": 0.00019999999999997797,
+		"Long bone": 0.0024999999999999467
+	},
+	"Phantom Muspah": {
+		"Ancient essence": 0.6,
+		"Ancient icon": 0.020000000000000018,
+		"Frozen cache": 0.040000000000000036,
+		"Muphin": 0.00039999999999995595,
+		"Venator shard": 0.010000000000000009
+	},
+	"Sarachnis": {
+		"Dragon med helm": 0.00520833333333337,
+		"Giant egg sac(full)": 0.050000000000000044,
+		"Grubby key": 0.06666666666666665,
+		"Jar of eyes": 0.0004999999999999449,
+		"Pristine spider silk": 0.020000000000000018,
+		"Sarachnis cudgel": 0.0026041666666666297,
+		"Sraracha": 0.0003333333333332966,
+		"Tattered moon page": 0.19999999999999996,
+		"Tattered sun page": 0.19999999999999996,
+		"Tattered temple page": 0.19999999999999996
+	},
+	"Scorpia": {
+		"Ensouled scorpion head": 0.05555555555555558,
+		"Looting bag": 0.33333333333333326,
+		"Malediction shard 3": 0.00390625,
+		"Odium shard 3": 0.00390625,
+		"Scorpia's offspring": 0.0004960932655339034
+	},
+	"Scurrius": {
+		"Curved bone": 0.00019950124688283832,
+		"Long bone": 0.0024999999999999467,
+		"Scurrius' spine": 0.030303030303030276
+	},
+	"Skeletal Wyvern": {
+		"Draconic visage": 9.999999999998899e-05,
+		"Dragon platelegs": 0.001953125,
+		"Dragon plateskirt": 0.001953125,
+		"Granite legs": 0.001953125
+	},
+	"Skotizo": {
+		"Dark claw": 0.040000000000000036,
+		"Dark totem": 0.0078125,
+		"Dark totem middle": 0.0234375,
+		"Dark totem top": 0.0234375,
+		"Ensouled demon head": 0.09999999999999998,
+		"Jar of darkness": 0.0050000000000000044,
+		"Skotos": 0.01538461538461533
+	},
+	"Spindel": {
+		"Dragon 2h sword": 0.0027932960893854997,
+		"Dragon pickaxe": 0.0027932960893854997,
+		"Fangs of venenatis": 0.0016181229773463146,
+		"Looting bag": 0.33333333333333326,
+		"Strange fruit": 0.19999999999999996,
+		"Treasonous ring": 0.0013966480446927498,
+		"Venenatis spiderling": 0.00035714285714283367,
+		"Voidwaker gem": 0.0010964912280702066
+	},
+	"Steel dragon": {
+		"Draconic visage": 9.999999999998899e-05,
+		"Dragon platelegs": 0.001953125,
+		"Dragon plateskirt": 0.001953125
+	},
+	"The Hueycoatl": {
+		"Dragon hunter wand": 0.00952380952380949,
+		"Huberte": 0.0024999999999999467,
+		"Hueycoatl hide": 0.03492063492063491,
+		"Tome of earth (empty)": 0.011111111111111072,
+		"Tooth half of key (moon key)": 0.013333333333333308
+	},
+	"The Leviathan": {
+		"Chromium ingot": 0.00390625,
+		"Leviathan's lure": 0.0013020833333333703,
+		"Lil'viathan": 0.00039999999999995595,
+		"Venator vestige": 0.0013020833333333703,
+		"Virtus mask": 0.0004340277777777901,
+		"Virtus robe bottom": 0.0004340277777777901,
+		"Virtus robe top": 0.0004340277777777901
+	},
+	"The Nightmare": {
+		"Eldritch orb": 0.0010416666666667185,
+		"Harmonised orb": 0.0010416666666667185,
+		"Inquisitor's great helm": 0.0023809523809523725,
+		"Inquisitor's hauberk": 0.0023809523809523725,
+		"Inquisitor's mace": 0.0013333333333332975,
+		"Inquisitor's plateskirt": 0.0023809523809523725,
+		"Jar of dreams": 0.000526315789473708,
+		"Little nightmare": 0.0012499999999999734,
+		"Nightmare staff": 0.0033333333333332993,
+		"Volatile orb": 0.0010416666666667185
+	},
+	"The Whisperer": {
+		"Bellator vestige": 0.001953125,
+		"Chromium ingot": 0.005859375,
+		"Siren's staff": 0.001953125,
+		"Virtus mask": 0.0006510416666666297,
+		"Virtus robe bottom": 0.0006510416666666297,
+		"Virtus robe top": 0.0006510416666666297,
+		"Wisp": 0.0004999999999999449
+	},
+	"Thermonuclear smoke devil": {
+		"Dragon chainbody": 0.0004999999999999449,
+		"Jar of smoke": 0.0004999999999999449,
+		"Occult necklace": 0.0028571428571428914,
+		"Pet smoke devil": 0.0003333333333332966,
+		"Smoke battlestaff": 0.001953125
+	},
+	"Vardorvis": {
+		"Butch": 0.0003333333333332966,
+		"Chromium ingot": 0.0027573529411765163,
+		"Executioner's axe head": 0.0009191176470588758,
+		"Ultor vestige": 0.0009191176470588758,
+		"Virtus mask": 0.00030637254901966227,
+		"Virtus robe bottom": 0.00030637254901966227,
+		"Virtus robe top": 0.00030637254901966227
+	},
+	"Venenatis": {
+		"Curved bone": 0.00019950124688283832,
+		"Dragon 2h sword": 0.00390625,
+		"Dragon pickaxe": 0.00390625,
+		"Fangs of venenatis": 0.005102040816326481,
+		"Long bone": 0.0024999999999999467,
+		"Looting bag": 0.33333333333333326,
+		"Strange fruit": 0.19999999999999996,
+		"Treasonous ring": 0.001953125,
+		"Voidwaker gem": 0.002777777777777768
+	},
+	"Vet'ion": {
+		"Curved bone": 0.00019950124688283832,
+		"Dragon 2h sword": 0.00390625,
+		"Dragon pickaxe": 0.00390625,
+		"Long bone": 0.0024999999999999467,
+		"Looting bag": 0.33333333333333326,
+		"Ring of the gods": 0.001953125,
+		"Skeleton champion scroll": 0.00019999999999997797,
+		"Skull of vet'ion": 0.005102040816326481,
+		"Vet'ion jr.": 0.0006666666666667043,
+		"Voidwaker blade": 0.002777777777777768
+	},
+	"Vorkath": {
+		"Draconic visage": 0.00019999999999997797,
+		"Dragonbone necklace": 0.0010000000000000009,
+		"Jar of decay": 0.0003333333333332966,
+		"Scaly blue dragonhide": 0.09999999999999998,
+		"Skeletal visage": 0.00019999999999997797,
+		"Vorki": 0.0003333333333332966
+	},
+	"Yama": {
+		"Dossier": 0.0826446280991735,
+		"Forgotten lockbox": 0.030303030303030276,
+		"Oathplate chest": 0.0016666666666667052,
+		"Oathplate helm": 0.0016666666666667052,
+		"Oathplate legs": 0.0016666666666667052,
+		"Oathplate shards": 0.05858230814294085,
+		"Soulflame horn": 0.0033333333333332993,
+		"Yami": 0.00039999999999995595
+	},
+	"Zalcano": {
+		"Crystal tool seed": 0.004874999999999963,
+		"Smolcano": 0.0004444444444444695,
+		"Uncut onyx": 0.00012500000000004174,
+		"Zalcano shard": 0.0013333333333332975
+	},
+	"Zulrah": {
+		"Jar of swamp": 0.0003333333333332966,
+		"Magic fang": 0.0019521713256835938,
+		"Pet snakeling": 0.00024999999999997247,
+		"Serpentine visage": 0.0019521713256835938,
+		"Tanzanite fang": 0.0019521713256835938,
+		"Uncut onyx": 0.0019521713256835938
+	}
+}

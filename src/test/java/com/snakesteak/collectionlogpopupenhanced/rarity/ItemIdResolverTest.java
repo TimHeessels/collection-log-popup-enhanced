@@ -1,0 +1,208 @@
+package com.snakesteak.collectionlogpopupenhanced.rarity;
+
+import java.util.Collections;
+import java.util.List;
+import net.runelite.api.Client;
+import net.runelite.api.Item;
+import net.runelite.api.ItemComposition;
+import net.runelite.api.ItemContainer;
+import net.runelite.api.TileItem;
+import net.runelite.api.events.GameTick;
+import net.runelite.api.events.ItemContainerChanged;
+import net.runelite.api.events.ItemDespawned;
+import net.runelite.api.events.ItemSpawned;
+import net.runelite.api.gameval.InventoryID;
+import net.runelite.client.game.ItemManager;
+import net.runelite.http.api.item.ItemPrice;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
+public class ItemIdResolverTest
+{
+	private Client client;
+	private ItemManager itemManager;
+	private ItemIdResolver resolver;
+
+	private static ItemPrice itemPrice(int id, String name)
+	{
+		ItemPrice itemPrice = new ItemPrice();
+		itemPrice.setId(id);
+		itemPrice.setName(name);
+		return itemPrice;
+	}
+
+	private static void nameItem(ItemManager itemManager, int id, String name)
+	{
+		ItemComposition composition = mock(ItemComposition.class);
+		when(composition.getName()).thenReturn(name);
+		when(itemManager.getItemComposition(id)).thenReturn(composition);
+	}
+
+	private static ItemContainer inventoryOf(Item... items)
+	{
+		ItemContainer inventory = mock(ItemContainer.class);
+		when(inventory.getItems()).thenReturn(items);
+		return inventory;
+	}
+
+	/**
+	 * Captures the id/source delivered to a ResolveCallback so tests can assert on it after the fact.
+	 * Resolution is asynchronous now (see ItemIdResolver.resolveIdByName), so tests can't just take a
+	 * return value.
+	 */
+	private static class CapturingCallback implements ItemIdResolver.ResolveCallback
+	{
+		private boolean called;
+		private int value;
+		private ItemIdResolver.Source source;
+
+		@Override
+		public void accept(int value, ItemIdResolver.Source source)
+		{
+			this.called = true;
+			this.value = value;
+			this.source = source;
+		}
+	}
+
+	@Before
+	public void before()
+	{
+		client = mock(Client.class);
+		itemManager = mock(ItemManager.class);
+		resolver = new ItemIdResolver(client, itemManager);
+
+		ItemContainer emptyInventory = inventoryOf();
+		when(client.getItemContainer(InventoryID.INV)).thenReturn(emptyInventory);
+		when(itemManager.search(org.mockito.ArgumentMatchers.anyString())).thenReturn(Collections.emptyList());
+	}
+
+	@Test
+	public void resolvesPetByNameWithoutTouchingInventoryOrGround()
+	{
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Baby mole", callback);
+
+		assertEquals(net.runelite.api.gameval.ItemID.MOLEPET, callback.value);
+		assertEquals(ItemIdResolver.Source.PET, callback.source);
+	}
+
+	@Test
+	public void findsMatchInInventorySynchronously()
+	{
+		ItemContainer inventory = inventoryOf(new Item(100, 1), new Item(-1, 0));
+		when(client.getItemContainer(InventoryID.INV)).thenReturn(inventory);
+		nameItem(itemManager, 100, "Foo");
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Foo", callback);
+
+		assertEquals(100, callback.value);
+		assertEquals(ItemIdResolver.Source.INVENTORY, callback.source);
+	}
+
+	@Test
+	public void findsMatchAmongTrackedGroundItemsSynchronously()
+	{
+		TileItem tileItem = mock(TileItem.class);
+		when(tileItem.getId()).thenReturn(200);
+		nameItem(itemManager, 200, "Bar");
+
+		resolver.onItemSpawned(new ItemSpawned(null, tileItem));
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Bar", callback);
+
+		assertEquals(200, callback.value);
+		assertEquals(ItemIdResolver.Source.GROUND, callback.source);
+	}
+
+	@Test
+	public void despawnedGroundItemNoLongerMatches()
+	{
+		TileItem tileItem = mock(TileItem.class);
+		when(tileItem.getId()).thenReturn(201);
+		nameItem(itemManager, 201, "Baz");
+
+		resolver.onItemSpawned(new ItemSpawned(null, tileItem));
+		resolver.onItemDespawned(new ItemDespawned(null, tileItem));
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Baz", callback);
+		assertFalse("should defer rather than resolve immediately", callback.called);
+
+		resolver.onGameTick(new GameTick());
+		assertEquals(-1, callback.value);
+		assertEquals(ItemIdResolver.Source.UNRESOLVED, callback.source);
+	}
+
+	@Test
+	public void fallsBackToGeSearchAtEndOfTickWhenNotInInventoryOrOnGround()
+	{
+		when(itemManager.search("Twisted bow")).thenReturn(List.of(itemPrice(20997, "Twisted bow")));
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Twisted bow", callback);
+		assertFalse("should defer rather than resolve immediately", callback.called);
+
+		resolver.onGameTick(new GameTick());
+		assertEquals(20997, callback.value);
+		assertEquals(ItemIdResolver.Source.GE_SEARCH, callback.source);
+	}
+
+	@Test
+	public void returnsMinusOneWhenNothingMatchesByEndOfTick()
+	{
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Nothing matches this", callback);
+
+		resolver.onGameTick(new GameTick());
+		assertEquals(-1, callback.value);
+		assertEquals(ItemIdResolver.Source.UNRESOLVED, callback.source);
+	}
+
+	/**
+	 * Reproduces the real-world bug: the "New item added to your collection log" chat message is
+	 * delivered BEFORE the ItemContainerChanged event that actually adds the item to the inventory.
+	 * A purely synchronous inventory/ground/GE check (the old behavior) can never find an untradeable
+	 * item in this case and always falls back to -1. The resolver must wait for the inventory update
+	 * and diff it against the pre-message snapshot to find the newly-appeared id.
+	 */
+	@Test
+	public void resolvesUntradeableItemFromDeferredInventoryDiff()
+	{
+		nameItem(itemManager, 300, "Partial note");
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Partial note", callback);
+		assertFalse("id shouldn't be known yet - inventory hasn't updated", callback.called);
+
+		ItemContainer updatedInventory = inventoryOf(new Item(300, 1));
+		resolver.onItemContainerChanged(new ItemContainerChanged(InventoryID.INV, updatedInventory));
+
+		assertEquals(300, callback.value);
+		assertEquals(ItemIdResolver.Source.INVENTORY_DIFF, callback.source);
+	}
+
+	@Test
+	public void ignoresItemContainerChangedForOtherContainers()
+	{
+		nameItem(itemManager, 300, "Partial note");
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Partial note", callback);
+
+		ItemContainer bank = inventoryOf(new Item(300, 1));
+		resolver.onItemContainerChanged(new ItemContainerChanged(InventoryID.BANK, bank));
+		assertFalse("bank updates shouldn't resolve an inventory-bound lookup", callback.called);
+
+		resolver.onGameTick(new GameTick());
+		assertEquals(-1, callback.value);
+		assertEquals(ItemIdResolver.Source.UNRESOLVED, callback.source);
+	}
+}

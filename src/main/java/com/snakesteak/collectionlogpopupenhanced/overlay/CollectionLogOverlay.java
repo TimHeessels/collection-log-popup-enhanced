@@ -13,6 +13,8 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.Shape;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,29 +38,42 @@ import net.runelite.client.util.QuantityFormatter;
 @Singleton
 public class CollectionLogOverlay extends Overlay
 {
-	// Matches the fixed size of the bundled Rarity1-4.png background art.
-	private static final int PANEL_WIDTH = 328;
-	private static final int PANEL_HEIGHT = 109;
+	// Matches the fixed size of the bundled BackgroundPanel1-4.png background art.
+	private static final int PANEL_WIDTH = 379;
+	private static final int PANEL_HEIGHT = 128;
 
-	private static final int ICON_X = 18;
-	private static final int ICON_Y = 14;
-	private static final int ICON_SIZE = 78;
+	// Extra breathing room above the panel (and the icon, which already overhangs above the panel's
+	// own top edge) so the whole notification doesn't sit flush against the very top of the screen.
+	private static final int TOP_MARGIN = 40;
+
+	// The icon slot is a separate element from the panel - it's centered horizontally above the
+	// panel and straddles its top edge (roughly half the icon sits above the panel, half overlaps
+	// it), matching the bundled IconPanel1-4.png art (89x89) and animating independently of the
+	// panel's own fold-open transform.
+	private static final int ICON_CANVAS_SIZE = 89;
+	private static final int ICON_X = (PANEL_WIDTH - ICON_CANVAS_SIZE) / 2;
+	private static final int ICON_Y = -ICON_CANVAS_SIZE / 2;
 	// Item sprites are a fixed 36x32 (net.runelite.api.Constants.ITEM_SPRITE_WIDTH/HEIGHT) - far
-	// smaller than the icon slot, so scale the longer side up to this before centering it.
+	// smaller than the icon slot's ~71px usable interior, so scale the longer side up to this
+	// before centering it.
 	private static final int ICON_TARGET_SIZE = 66;
 
-	private static final int TEXT_X = 108;
-	private static final int TEXT_RIGHT_MARGIN = 10;
-	private static final int TITLE_BASELINE_Y = 33;
-	private static final int NAME_BASELINE_Y = 53;
-	private static final int NAME_LINE_HEIGHT = 17;
-	// Pinned near the bottom of the panel's actual interior (rather than a fixed offset below the
-	// name) so a long item name can wrap onto a second line without pushing the stat row down with
-	// it. The bundled Rarity1-4.png art is 109px tall, but its dark interior background - as opposed
-	// to the decorative border, or fully transparent padding below that - only extends to about y=90
-	// (verified by sampling pixel alpha/color down the image), so this has to stay well short of
-	// PANEL_HEIGHT to avoid drawing into the border.
-	private static final int PRICE_BASELINE_Y = 84;
+	// Top-left / top-right stacked label+value blocks. Both stay clear of the icon's horizontal
+	// footprint (ICON_X to ICON_X+ICON_CANVAS_SIZE) even though the icon dips down into this same
+	// vertical band, and stay above the divider line that's already baked into the background art
+	// at y=57-58 (verified by pixel-sampling the bundled art - no divider is drawn in code).
+	private static final int CORNER_PADDING_X = 16;
+	private static final int CORNER_LABEL_BASELINE_Y = 22;
+	private static final int CORNER_VALUE_BASELINE_Y = 40;
+
+	// Item name - centered, below the baked-in divider.
+	private static final int NAME_BASELINE_Y = 84;
+	private static final int NAME_LINE_HEIGHT = 20;
+	private static final int NAME_SIDE_MARGIN = 16;
+
+	// Caption - centered, replaces the old top-left "Collection log" title.
+	private static final String CAPTION_TEXT = "Collection log slot";
+	private static final int CAPTION_BASELINE_Y = 115;
 
 	private static final Color TITLE_COLOR = new Color(255, 152, 31);
 	private static final Color COMMON_COLOR = new Color(220, 220, 214);
@@ -69,37 +84,45 @@ public class CollectionLogOverlay extends Overlay
 	private static final Color PRICE_LABEL_COLOR = COMMON_COLOR;
 	private static final Color PRICE_VALUE_COLOR = new Color(255, 205, 45);
 
-	private static final float TITLE_FONT_SIZE = 13f;
-	private static final float NAME_FONT_SIZE = 15f;
-	private static final float NAME_FONT_MIN_SIZE = 10f;
-	private static final float PRICE_FONT_SIZE = 11f;
+	private static final float CORNER_LABEL_FONT_SIZE = 9f;
+	private static final float CORNER_VALUE_FONT_SIZE = 14f;
+	private static final float NAME_FONT_SIZE = 19f;
+	private static final float NAME_FONT_MIN_SIZE = 13f;
+	private static final float CAPTION_FONT_SIZE = 13f;
 
-	// Fold open/closed drives how much of the background is revealed; fade in/out drives the
-	// icon/text alpha. The two run back-to-back (fold, then fade) on the way in, and in reverse
-	// on the way out.
-	private static final long FOLD_MILLIS = 220;
-	private static final long FADE_MILLIS = 180;
+	// Fold-open (panel scaleY, pivoted at its top edge) plays first; the icon pop (its own
+	// scale+fade, pivoted at its own center) starts exactly when the fold ends, derived from
+	// FOLD_MILLIS rather than a separately-hardcoded delay so the two can't drift apart. Hold
+	// length is user-configurable (see config.overlayDisplaySeconds()). Fade-out dissolves the
+	// panel and icon together and is the only closing animation - there's no reverse-fold.
+	private static final long FOLD_MILLIS = 550;
+	private static final long ICON_POP_MILLIS = 400;
+	private static final long FADE_MILLIS = 400;
 
-	private enum Phase
-	{
-		OPENING, FADING_IN, VISIBLE, FADING_OUT, CLOSING
-	}
+	private static final float ICON_MIN_SCALE = 0.4f;
+	private static final float FOLD_OVERSHOOT = 1.0f;
+	private static final float ICON_POP_OVERSHOOT = 1.9f;
 
 	private final ItemManager itemManager;
 	private final CollectionLogPopupEnhancedConfig config;
 	private final SoundManager soundManager;
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
-	private final Font titleFont;
+	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
+	private final Font cornerLabelFont;
+	private final Font cornerValueFont;
 	private final Font nameFont;
-	private final Font priceFont;
+	private final Font captionFont;
 
 	// Only ever written/read from the client thread (enqueue() from chat/command event handlers,
 	// render() from the client's render pass), so no synchronization is needed.
 	private final Deque<PendingItem> queue = new ArrayDeque<>();
 
 	private PendingItem current;
-	private Phase phase;
-	private long phaseStartMillis;
+	// A single continuous timeline (elapsed ms since this notification started), rather than a
+	// mutable phase/phaseStartMillis pair - the fold, icon-pop, hold and fade-out windows are all
+	// just fixed offsets/durations along it, so the icon's start delay can reference FOLD_MILLIS
+	// directly instead of drifting out of sync with a separately-tracked phase transition.
+	private long notificationStartMillis;
 
 	@Inject
 	public CollectionLogOverlay(ItemManager itemManager, CollectionLogPopupEnhancedConfig config, SoundManager soundManager)
@@ -109,24 +132,29 @@ public class CollectionLogOverlay extends Overlay
 		this.soundManager = soundManager;
 		setPosition(OverlayPosition.TOP_CENTER);
 
-		BufferedImage common = loadBackground("Rarity1.png");
-		BufferedImage uncommon = loadBackground("Rarity2.png");
-		BufferedImage rare = loadBackground("Rarity3.png");
-		BufferedImage veryRare = loadBackground("Rarity4.png");
-		backgrounds.put(RarityTier.COMMON, common);
-		backgrounds.put(RarityTier.UNCOMMON, uncommon);
-		backgrounds.put(RarityTier.RARE, rare);
-		backgrounds.put(RarityTier.VERY_RARE, veryRare);
+		backgrounds.put(RarityTier.COMMON, loadImage("Backgrounds/BackgroundPanel1.png"));
+		backgrounds.put(RarityTier.UNCOMMON, loadImage("Backgrounds/BackgroundPanel2.png"));
+		backgrounds.put(RarityTier.RARE, loadImage("Backgrounds/BackgroundPanel3.png"));
+		BufferedImage veryRareBackground = loadImage("Backgrounds/BackgroundPanel4.png");
+		backgrounds.put(RarityTier.VERY_RARE, veryRareBackground);
 		// No dedicated pet artwork is bundled - pets are the rarest category, so they reuse the
 		// very rare border; the pink item-name text still distinguishes them from a regular drop.
-		backgrounds.put(RarityTier.PET, veryRare);
+		backgrounds.put(RarityTier.PET, veryRareBackground);
 
-		titleFont = FontManager.getRunescapeBoldFont().deriveFont(TITLE_FONT_SIZE);
+		iconFrames.put(RarityTier.COMMON, loadImage("Icons/IconPanel1.png"));
+		iconFrames.put(RarityTier.UNCOMMON, loadImage("Icons/IconPanel2.png"));
+		iconFrames.put(RarityTier.RARE, loadImage("Icons/IconPanel3.png"));
+		BufferedImage veryRareIconFrame = loadImage("Icons/IconPanel4.png");
+		iconFrames.put(RarityTier.VERY_RARE, veryRareIconFrame);
+		iconFrames.put(RarityTier.PET, veryRareIconFrame);
+
+		cornerLabelFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_LABEL_FONT_SIZE);
+		cornerValueFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_VALUE_FONT_SIZE);
 		nameFont = FontManager.getRunescapeBoldFont().deriveFont(NAME_FONT_SIZE);
-		priceFont = FontManager.getRunescapeBoldFont().deriveFont(PRICE_FONT_SIZE);
+		captionFont = FontManager.getRunescapeBoldFont().deriveFont(CAPTION_FONT_SIZE);
 	}
 
-	private static BufferedImage loadBackground(String resourceName)
+	private static BufferedImage loadImage(String resourceName)
 	{
 		try (InputStream in = CollectionLogOverlay.class.getResourceAsStream("/" + resourceName))
 		{
@@ -134,7 +162,7 @@ public class CollectionLogOverlay extends Overlay
 		}
 		catch (IOException e)
 		{
-			throw new UncheckedIOException("Failed to load overlay background " + resourceName, e);
+			throw new UncheckedIOException("Failed to load overlay image " + resourceName, e);
 		}
 	}
 
@@ -155,7 +183,6 @@ public class CollectionLogOverlay extends Overlay
 	{
 		queue.clear();
 		current = null;
-		phase = null;
 	}
 
 	@Override
@@ -170,97 +197,162 @@ public class CollectionLogOverlay extends Overlay
 			// overlay's cached bounds to (0, 0) whenever render() returns null, and TOP_CENTER
 			// positioning centers each frame using the *previous* frame's bounds. Returning 0 here
 			// would make the panel start centered around half of nothing, then visibly jump left
-			// once the real width is reported on the following frame.
+			// once the real width is reported on the following frame. The icon overhangs above the
+			// panel (see ICON_Y), but that overhang isn't included here - RuneLite doesn't clip
+			// overlay drawing to this reported size, it's only used for next-frame positioning.
 			return new Dimension(PANEL_WIDTH, 0);
 		}
 
-		BufferedImage background = backgrounds.get(current.getTier());
-		float openProgress = openProgress(now);
-		int drawnHeight = Math.round(PANEL_HEIGHT * openProgress);
+		long elapsed = now - notificationStartMillis;
+		long holdMillis = config.overlayDisplaySeconds() * 1000L;
+		long iconPopStart = FOLD_MILLIS;
+		long holdStart = iconPopStart + ICON_POP_MILLIS;
+		long fadeStart = holdStart + holdMillis;
 
-		if (drawnHeight >= 2)
+		float foldRaw = clamp01(elapsed / (float) FOLD_MILLIS);
+		float foldT = easeOutBack(foldRaw, FOLD_OVERSHOOT);
+		float fadeAlpha = elapsed < fadeStart ? 1f : 1f - easeInCubic(clamp01((elapsed - fadeStart) / (float) FADE_MILLIS));
+
+		graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+		graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+
+		// Push everything (panel + icon overhang) down by TOP_MARGIN before capturing the base
+		// transform both animated pieces reset back to between draws.
+		graphics.translate(0, TOP_MARGIN);
+		AffineTransform base = graphics.getTransform();
+		Composite originalComposite = graphics.getComposite();
+
+		// --- panel: scaleY-only fold, pivoted at its own top edge, plus whatever's left of the
+		// fade-out alpha. Corner stats/name/caption are drawn here too (not in a separate crossfade
+		// step) so they reveal progressively as the fold grows, top edge first.
+		graphics.translate(PANEL_WIDTH / 2.0, 0);
+		graphics.scale(1.0, foldT);
+		graphics.translate(-PANEL_WIDTH / 2.0, 0);
+
+		Shape originalClip = graphics.getClip();
+		if (foldRaw < 1f)
 		{
-			Shape originalClip = graphics.getClip();
-			graphics.clipRect(0, 0, PANEL_WIDTH, drawnHeight);
-			graphics.drawImage(background, 0, 0, null);
-			graphics.setClip(originalClip);
+			// Still folding - clip to the panel's own bounds (already scaled by the transform above)
+			// so nothing draws above/below where the fold has actually reached yet.
+			graphics.clip(new Rectangle2D.Float(0, 0, PANEL_WIDTH, PANEL_HEIGHT));
+		}
+		if (fadeAlpha < 1f)
+		{
+			graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, fadeAlpha));
 		}
 
-		float contentAlpha = openProgress >= 1f ? contentAlpha(now) : 0f;
-		if (contentAlpha > 0.01f)
+		graphics.drawImage(backgrounds.get(current.getTier()), 0, 0, null);
+		drawPanelContent(graphics);
+
+		graphics.setClip(originalClip);
+		graphics.setComposite(originalComposite);
+		graphics.setTransform(base);
+
+		// --- icon: independent pop (own scale + fade, pivoted at its own center), only once the
+		// fold has fully played out. Skipped entirely (not just alpha 0) before that.
+		if (elapsed >= iconPopStart)
 		{
-			Composite originalComposite = graphics.getComposite();
-			graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, contentAlpha));
-			// The RuneScape font is a small bitmap-style pixel font - antialiasing/fractional
-			// metrics smooth it into a blurry halo instead of the crisp look the game's own UI has.
-			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-			graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+			float iconRaw = clamp01((elapsed - iconPopStart) / (float) ICON_POP_MILLIS);
+			float iconEase = easeOutBack(iconRaw, ICON_POP_OVERSHOOT);
+			float iconScale = ICON_MIN_SCALE + (1f - ICON_MIN_SCALE) * iconEase;
+			float iconAlpha = clamp01(iconEase) * fadeAlpha;
 
-			// A negative id means ItemIdResolver couldn't identify the item (untradeable and not seen
-			// in inventory/on the ground - see ItemIdResolver javadoc). ItemManager.getImage() doesn't
-			// handle that gracefully - it silently returns an unrelated cache sprite rather than null
-			// or throwing - so the icon slot is left blank instead of showing that garbage image.
-			if (current.getItemId() >= 0)
+			float iconCenterX = ICON_X + ICON_CANVAS_SIZE / 2f;
+			float iconCenterY = ICON_Y + ICON_CANVAS_SIZE / 2f;
+			graphics.translate(iconCenterX, iconCenterY);
+			graphics.scale(iconScale, iconScale);
+			graphics.translate(-iconCenterX, -iconCenterY);
+
+			if (iconAlpha < 1f)
 			{
-				BufferedImage sprite = itemManager.getImage(current.getItemId());
-				float spriteScale = ICON_TARGET_SIZE / (float) Math.max(sprite.getWidth(), sprite.getHeight());
-				int scaledWidth = Math.round(sprite.getWidth() * spriteScale);
-				int scaledHeight = Math.round(sprite.getHeight() * spriteScale);
-				Object originalInterpolation = graphics.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
-				graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-				graphics.drawImage(sprite,
-					ICON_X + (ICON_SIZE - scaledWidth) / 2,
-					ICON_Y + (ICON_SIZE - scaledHeight) / 2,
-					scaledWidth, scaledHeight,
-					null);
-				if (originalInterpolation != null)
-				{
-					graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, originalInterpolation);
-				}
+				graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, iconAlpha)));
 			}
-
-			graphics.setFont(titleFont);
-			graphics.setColor(TITLE_COLOR);
-			graphics.drawString("Collection log", TEXT_X, TITLE_BASELINE_Y);
-
-			int maxNameWidth = PANEL_WIDTH - TEXT_X - TEXT_RIGHT_MARGIN;
-			FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth);
-			graphics.setFont(fittedName.getFont());
-			graphics.setColor(tierColor(current.getTier()));
-			int nameY = NAME_BASELINE_Y;
-			for (String line : fittedName.getLines())
-			{
-				graphics.drawString(line, TEXT_X, nameY);
-				nameY += NAME_LINE_HEIGHT;
-			}
-
-			graphics.setFont(priceFont);
-			FontMetrics priceMetrics = graphics.getFontMetrics(priceFont);
-
-			Stat leftStat = resolveStatWithFallback(config.leftPanelStat().toPanelStat(), current);
-			if (leftStat != null)
-			{
-				graphics.setColor(PRICE_LABEL_COLOR);
-				graphics.drawString(leftStat.getLabel(), TEXT_X, PRICE_BASELINE_Y);
-				graphics.setColor(leftStat.getValueColor());
-				graphics.drawString(leftStat.getValue(), TEXT_X + priceMetrics.stringWidth(leftStat.getLabel()), PRICE_BASELINE_Y);
-			}
-
-			Stat rightStat = resolveStatWithFallback(config.rightPanelStat().toPanelStat(), current);
-			if (rightStat != null)
-			{
-				int rightX = TEXT_X + maxNameWidth - priceMetrics.stringWidth(rightStat.getLabel() + rightStat.getValue());
-
-				graphics.setColor(PRICE_LABEL_COLOR);
-				graphics.drawString(rightStat.getLabel(), rightX, PRICE_BASELINE_Y);
-				graphics.setColor(rightStat.getValueColor());
-				graphics.drawString(rightStat.getValue(), rightX + priceMetrics.stringWidth(rightStat.getLabel()), PRICE_BASELINE_Y);
-			}
-
+			graphics.drawImage(iconFrames.get(current.getTier()), ICON_X, ICON_Y, null);
+			drawItemSprite(graphics);
 			graphics.setComposite(originalComposite);
+			graphics.setTransform(base);
 		}
 
-		return new Dimension(PANEL_WIDTH, PANEL_HEIGHT);
+		return new Dimension(PANEL_WIDTH, PANEL_HEIGHT + TOP_MARGIN);
+	}
+
+	private void drawItemSprite(Graphics2D graphics)
+	{
+		// A negative id means ItemIdResolver couldn't identify the item (untradeable and not seen
+		// in inventory/on the ground - see ItemIdResolver javadoc). ItemManager.getImage() doesn't
+		// handle that gracefully - it silently returns an unrelated cache sprite rather than null
+		// or throwing - so the icon slot is left blank instead of showing that garbage image.
+		if (current.getItemId() < 0)
+		{
+			return;
+		}
+
+		BufferedImage sprite = itemManager.getImage(current.getItemId());
+		float spriteScale = ICON_TARGET_SIZE / (float) Math.max(sprite.getWidth(), sprite.getHeight());
+		int scaledWidth = Math.round(sprite.getWidth() * spriteScale);
+		int scaledHeight = Math.round(sprite.getHeight() * spriteScale);
+		Object originalInterpolation = graphics.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
+		graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+		graphics.drawImage(sprite,
+			ICON_X + (ICON_CANVAS_SIZE - scaledWidth) / 2,
+			ICON_Y + (ICON_CANVAS_SIZE - scaledHeight) / 2,
+			scaledWidth, scaledHeight,
+			null);
+		if (originalInterpolation != null)
+		{
+			graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, originalInterpolation);
+		}
+	}
+
+	private void drawPanelContent(Graphics2D graphics)
+	{
+		FontMetrics cornerLabelMetrics = graphics.getFontMetrics(cornerLabelFont);
+		FontMetrics cornerValueMetrics = graphics.getFontMetrics(cornerValueFont);
+
+		Stat leftStat = resolveStatWithFallback(config.leftPanelStat().toPanelStat(), current);
+		if (leftStat != null)
+		{
+			drawCornerStat(graphics, leftStat, CORNER_PADDING_X, CORNER_PADDING_X, cornerLabelMetrics, cornerValueMetrics);
+		}
+
+		Stat rightStat = resolveStatWithFallback(config.rightPanelStat().toPanelStat(), current);
+		if (rightStat != null)
+		{
+			// Right corner: label and value are each independently right-aligned to the panel edge,
+			// not sharing one x - the label ("Value") is usually much shorter than the value
+			// ("1,121,123 gp") and would look left-stranded if both used the same starting x.
+			int labelX = PANEL_WIDTH - CORNER_PADDING_X - cornerLabelMetrics.stringWidth(rightStat.getLabel());
+			int valueX = PANEL_WIDTH - CORNER_PADDING_X - cornerValueMetrics.stringWidth(rightStat.getValue());
+			drawCornerStat(graphics, rightStat, labelX, valueX, cornerLabelMetrics, cornerValueMetrics);
+		}
+
+		int maxNameWidth = PANEL_WIDTH - 2 * NAME_SIDE_MARGIN;
+		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth);
+		graphics.setColor(tierColor(current.getTier()));
+		int nameY = NAME_BASELINE_Y;
+		for (String line : fittedName.getLines())
+		{
+			graphics.setFont(fittedName.getFont());
+			int lineX = (PANEL_WIDTH - graphics.getFontMetrics().stringWidth(line)) / 2;
+			graphics.drawString(line, lineX, nameY);
+			nameY += NAME_LINE_HEIGHT;
+		}
+
+		graphics.setFont(captionFont);
+		graphics.setColor(TITLE_COLOR);
+		int captionX = (PANEL_WIDTH - graphics.getFontMetrics().stringWidth(CAPTION_TEXT)) / 2;
+		graphics.drawString(CAPTION_TEXT, captionX, CAPTION_BASELINE_Y);
+	}
+
+	private static void drawCornerStat(Graphics2D graphics, Stat stat, int labelX, int valueX, FontMetrics labelMetrics, FontMetrics valueMetrics)
+	{
+		graphics.setFont(labelMetrics.getFont());
+		graphics.setColor(PRICE_LABEL_COLOR);
+		graphics.drawString(stat.getLabel(), labelX, CORNER_LABEL_BASELINE_Y);
+
+		graphics.setFont(valueMetrics.getFont());
+		graphics.setColor(stat.getValueColor());
+		graphics.drawString(stat.getValue(), valueX, CORNER_VALUE_BASELINE_Y);
 	}
 
 	private void advance(long now)
@@ -270,8 +362,7 @@ public class CollectionLogOverlay extends Overlay
 			current = queue.pollFirst();
 			if (current != null)
 			{
-				phase = Phase.OPENING;
-				phaseStartMillis = now;
+				notificationStartMillis = now;
 				// Fired here rather than at enqueue() time so playback is spaced out to match the visual
 				// reveal of each item, instead of every item in a burst firing its sound at once (which
 				// used to overlap/cut each other off on top of the client's audio mixer).
@@ -283,80 +374,32 @@ public class CollectionLogOverlay extends Overlay
 			return;
 		}
 
-		long elapsed = now - phaseStartMillis;
-		switch (phase)
+		long totalMillis = FOLD_MILLIS + ICON_POP_MILLIS + config.overlayDisplaySeconds() * 1000L + FADE_MILLIS;
+		if (now - notificationStartMillis >= totalMillis)
 		{
-			case OPENING:
-				if (elapsed >= FOLD_MILLIS)
-				{
-					phase = Phase.FADING_IN;
-					phaseStartMillis = now;
-				}
-				break;
-			case FADING_IN:
-				if (elapsed >= FADE_MILLIS)
-				{
-					phase = Phase.VISIBLE;
-					phaseStartMillis = now;
-				}
-				break;
-			case VISIBLE:
-				if (elapsed >= config.overlayDisplaySeconds() * 1000L)
-				{
-					phase = Phase.FADING_OUT;
-					phaseStartMillis = now;
-				}
-				break;
-			case FADING_OUT:
-				if (elapsed >= FADE_MILLIS)
-				{
-					phase = Phase.CLOSING;
-					phaseStartMillis = now;
-				}
-				break;
-			case CLOSING:
-				if (elapsed >= FOLD_MILLIS)
-				{
-					current = null;
-					phase = null;
-				}
-				break;
-		}
-	}
-
-	private float openProgress(long now)
-	{
-		long elapsed = now - phaseStartMillis;
-		switch (phase)
-		{
-			case OPENING:
-				return clamp01(elapsed / (float) FOLD_MILLIS);
-			case CLOSING:
-				return 1f - clamp01(elapsed / (float) FOLD_MILLIS);
-			default:
-				return 1f;
-		}
-	}
-
-	private float contentAlpha(long now)
-	{
-		long elapsed = now - phaseStartMillis;
-		switch (phase)
-		{
-			case FADING_IN:
-				return clamp01(elapsed / (float) FADE_MILLIS);
-			case VISIBLE:
-				return 1f;
-			case FADING_OUT:
-				return 1f - clamp01(elapsed / (float) FADE_MILLIS);
-			default:
-				return 0f;
+			current = null;
 		}
 	}
 
 	private static float clamp01(float value)
 	{
 		return Math.max(0f, Math.min(1f, value));
+	}
+
+	/**
+	 * Standard parameterized back-ease-out: overshoots past 1 before settling exactly at 1 when
+	 * t=1. {@code overshoot} controls how far past 1 it swings - a bigger value is a punchier pop.
+	 */
+	private static float easeOutBack(float t, float overshoot)
+	{
+		float c3 = overshoot + 1f;
+		float p = t - 1f;
+		return 1f + c3 * p * p * p + overshoot * p * p;
+	}
+
+	private static float easeInCubic(float t)
+	{
+		return t * t * t;
 	}
 
 	/**

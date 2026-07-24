@@ -3,7 +3,6 @@ package com.snakesteak.collectionlogpopupenhanced;
 import com.google.inject.Provides;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
-import com.snakesteak.collectionlogpopupenhanced.killcount.TrackedKillCountManager;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
@@ -68,9 +67,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private KillCountTracker killCountTracker;
 
 	@Inject
-	private TrackedKillCountManager trackedKillCountManager;
-
-	@Inject
 	private DropRateResolver dropRateResolver;
 
 	@Inject
@@ -89,8 +85,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	{
 		eventBus.register(itemIdResolver);
 		eventBus.register(killCountTracker);
-		trackedKillCountManager.startUp();
-		eventBus.register(trackedKillCountManager);
 		overlayManager.add(collectionLogOverlay);
 		log.debug("Collection Log Popup Enhanced started!");
 	}
@@ -100,8 +94,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	{
 		eventBus.unregister(itemIdResolver);
 		eventBus.unregister(killCountTracker);
-		eventBus.unregister(trackedKillCountManager);
-		trackedKillCountManager.shutDown();
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
 		log.debug("Collection Log Popup Enhanced stopped!");
@@ -202,25 +194,16 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		// chat message first arrived - resolution can be deferred by a tick or more (see
 		// ItemIdResolver), and reading it here also covers the (typical) case where the kill count
 		// message hasn't been processed yet at the moment the collection log message is.
-		// The official kill count (from an in-game "kill count" chat message) always takes
-		// priority over the plugin's own tracked-since count for non-KC-message monsters - never
-		// mix the two, and only fall back to the tracked one when there's no official kill.
 		KillCountTracker.RecentKill kill = killCountTracker.recentKill();
-		boolean killCountIsTracked = false;
-		if (kill == null)
-		{
-			kill = trackedKillCountManager.recentKill();
-			killCountIsTracked = kill != null;
-		}
 
 		Integer killCount = kill != null ? kill.getKillCount() : null;
 		Double dropProbability = kill != null ? dropRateResolver.dropProbability(kill.getSource(), itemName) : null;
 
-		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, tracked {}, drop probability {})",
-			itemName, itemId, resolvedVia, result, killCount, killCountIsTracked, dropProbability);
+		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {})",
+			itemName, itemId, resolvedVia, result, killCount, dropProbability);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getCompPercent(), killCount, killCountIsTracked, dropProbability);
+			result.getCompPercent(), killCount, dropProbability);
 	}
 
 	@Subscribe

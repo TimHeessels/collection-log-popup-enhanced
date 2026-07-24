@@ -8,9 +8,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 /**
- * Loaded against the real bundled drop-rates.json (see scripts/generate-drop-rates.py). Cockatrice
- * -> Cockatrice head is a simple, verified 1/1000 single-roll drop, used here as a stable
- * reference point.
+ * Loaded against the real bundled drop-rates.json (see scripts/generate-drop-rates.py). Abyssal
+ * Sire -> Unsired is a simple, verified 1/100 single-roll drop, used here as a stable reference
+ * point.
  */
 public class DropRateResolverTest
 {
@@ -31,26 +31,26 @@ public class DropRateResolverTest
 	@Test
 	public void knownSourceUnknownItemReturnsNull()
 	{
-		assertNull(resolver.dropProbability("Cockatrice", "Not a real item"));
+		assertNull(resolver.dropProbability("Abyssal Sire", "Not a real item"));
 	}
 
 	@Test
 	public void sourceLookupIsCaseInsensitive()
 	{
-		assertEquals(resolver.dropProbability("Cockatrice", "Cockatrice head"),
-			resolver.dropProbability("COCKATRICE", "Cockatrice head"), 0.0001);
+		assertEquals(resolver.dropProbability("Abyssal Sire", "Unsired"),
+			resolver.dropProbability("ABYSSAL SIRE", "Unsired"), 0.0001);
 	}
 
 	@Test
 	public void itemLookupIsCaseInsensitive()
 	{
-		assertEquals(resolver.dropProbability("Cockatrice", "Cockatrice head"),
-			resolver.dropProbability("Cockatrice", "cockatrice HEAD"), 0.0001);
+		assertEquals(resolver.dropProbability("Abyssal Sire", "Unsired"),
+			resolver.dropProbability("Abyssal Sire", "UNSIRED"), 0.0001);
 	}
 
 	@Test
 	public void knownDropRateMatchesWikiFraction()
 	{
-		assertEquals(0.001, resolver.dropProbability("Cockatrice", "Cockatrice head"), 0.0001);
+		assertEquals(0.01, resolver.dropProbability("Abyssal Sire", "Unsired"), 0.0001);
 	}
 }

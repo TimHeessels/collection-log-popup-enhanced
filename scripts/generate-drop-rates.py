@@ -2,7 +2,7 @@
 """
 Generates drop-rates.json for CollectionLogPopupEnhanced from OSRS Wiki drop tables.
 
-Fetches raw wikitext for each boss/monster page listed below via
+Fetches raw wikitext for each boss page listed below via
 https://oldschool.runescape.wiki/index.php?title=<Page>&action=raw, extracts
 {{DropsLine|name=...|rarity=X/Y|rolls=N}} templates found within a small set of
 known "notable drop" wikitext section headers (===Uniques===, ===Tertiary===,
@@ -15,6 +15,12 @@ Entries with a non-numeric rarity (nested templates like {{Brimstone rarity|...}
 review. The first DropsLine for a given item name on a page wins - later
 duplicate listings (e.g. Wilderness/Deadman-mode variants of the same monster
 page) are ignored, matching the main/default variant.
+
+Scope is boss-only, deliberately: non-boss monsters were tried (see git history /
+KC-loot-Todo.md) and reverted - too many edge cases per monster (custom section
+headers, on-task/off-task rarity splits, "superior" variants with their own
+distinct NPC name, drop tables driven by a combat-level-parameterized template
+instead of a flat DropsLine) for the value of tracking them.
 
 Output: src/main/resources/com/snakesteak/collectionlogpopupenhanced/drop-rates.json
 Shape: { "Source name": { "Item name": probability (0-1), ... }, ... }
@@ -59,15 +65,6 @@ BOSSES = [
     # Sol Heredit (Fortis Colosseum) deliberately excluded: its unique chance scales with how
     # many waves are cleared before banking, same as the raids excluded from this dataset - no
     # single flat per-kill probability applies.
-]
-
-# Curated starter list of non-boss monsters with a collection log entry but no
-# official kill count message - verified individually during planning
-# research (each confirmed to have a numeric-rarity DropsLine entry).
-MONSTERS = [
-    "Cockatrice", "Greater abyssal demon", "Dark beast", "Skeletal Wyvern",
-    "Mithril dragon", "Black dragon", "Iron dragon", "Steel dragon",
-    "Brutal black dragon",
 ]
 
 RARITY_RE = re.compile(r"^(?P<num>\d+(?:\.\d+)?)\s*/\s*(?P<den>\d+(?:\.\d+)?)$")
@@ -220,11 +217,10 @@ def parse_drops(wikitext, source_name):
 
 
 def main():
-    sources = [(b, "boss") for b in BOSSES] + [(m, "monster") for m in MONSTERS]
     dataset = {}
 
-    for title, kind in sources:
-        print(f"Fetching {kind} '{title}'...", file=sys.stderr)
+    for title in BOSSES:
+        print(f"Fetching boss '{title}'...", file=sys.stderr)
         try:
             wikitext = fetch_wikitext(title)
         except Exception as e:

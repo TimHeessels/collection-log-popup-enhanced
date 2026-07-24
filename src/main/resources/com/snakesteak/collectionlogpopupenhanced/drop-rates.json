@@ -65,19 +65,6 @@
 		"Verac's helm": 0.0028559752478257705,
 		"Verac's plateskirt": 0.0028559752478257705
 	},
-	"Black dragon": {
-		"Draconic visage": 9.999999999998899e-05,
-		"Ensouled dragon head": 0.02857142857142858,
-		"Looting bag": 0.33333333333333326
-	},
-	"Brutal black dragon": {
-		"Draconic visage": 9.999999999998899e-05,
-		"Dragon platelegs": 0.001953125,
-		"Dragon plateskirt": 0.001953125,
-		"Dragon spear": 0.001953125,
-		"Ensouled dragon head": 0.050000000000000044,
-		"Uncut dragonstone": 0.001953125
-	},
 	"Bryophyta": {
 		"Clue scroll (beginner)": 0.022222222222222254,
 		"Curved bone": 0.00019950124688283832,
@@ -129,9 +116,6 @@
 		"Odium shard 1": 0.00390625,
 		"Pet chaos elemental": 0.0010000000000000009
 	},
-	"Cockatrice": {
-		"Cockatrice head": 0.0010000000000000009
-	},
 	"Commander Zilyana": {
 		"Armadyl crossbow": 0.0019685039370078705,
 		"Godsword shard 1": 0.001312335958005284,
@@ -166,12 +150,6 @@
 		"Dagannoth ribs": 0.25,
 		"Ensouled dagannoth head": 0.050000000000000044,
 		"Pet dagannoth supreme": 0.00019999999999997797
-	},
-	"Dark beast": {
-		"Crystal shard": 0.04166666666666663,
-		"Curved bone": 0.00019950124688283832,
-		"Dark bow": 0.001953125,
-		"Long bone": 0.0024999999999999467
 	},
 	"Deranged archaeologist": {
 		"Steel ring": 0.022900763358778664
@@ -208,9 +186,6 @@
 		"Immaculate mole skin": 0.020000000000000018,
 		"Long bone": 0.0024999999999999467
 	},
-	"Greater abyssal demon": {
-		"Abyssal head": 0.0001666666666666483
-	},
 	"Grotesque Guardians": {
 		"Black tourmaline core": 0.001998999999999973,
 		"Granite gloves": 0.0039959999999999996,
@@ -222,11 +197,6 @@
 	},
 	"Hespori": {
 		"Bottomless compost bucket": 0.02857142857142858
-	},
-	"Iron dragon": {
-		"Draconic visage": 9.999999999998899e-05,
-		"Dragon platelegs": 0.0009765625,
-		"Dragon plateskirt": 0.0009765625
 	},
 	"K'ril Tsutsaroth": {
 		"Godsword shard 1": 0.001312335958005284,
@@ -283,9 +253,6 @@
 		"Eclipse moon helm": 0.004464285714285698,
 		"Eclipse moon tassets": 0.004464285714285698
 	},
-	"Mithril dragon": {
-		"Draconic visage": 9.999999999998899e-05
-	},
 	"Nex": {
 		"Ancient hilt": 0.0019379844961240345,
 		"Nexling": 0.0020000000000000018,
@@ -332,12 +299,6 @@
 		"Long bone": 0.0024999999999999467,
 		"Scurrius' spine": 0.030303030303030276
 	},
-	"Skeletal Wyvern": {
-		"Draconic visage": 9.999999999998899e-05,
-		"Dragon platelegs": 0.001953125,
-		"Dragon plateskirt": 0.001953125,
-		"Granite legs": 0.001953125
-	},
 	"Skotizo": {
 		"Dark claw": 0.040000000000000036,
 		"Dark totem": 0.0078125,
@@ -356,11 +317,6 @@
 		"Treasonous ring": 0.0013966480446927498,
 		"Venenatis spiderling": 0.00035714285714283367,
 		"Voidwaker gem": 0.0010964912280702066
-	},
-	"Steel dragon": {
-		"Draconic visage": 9.999999999998899e-05,
-		"Dragon platelegs": 0.001953125,
-		"Dragon plateskirt": 0.001953125
 	},
 	"The Hueycoatl": {
 		"Dragon hunter wand": 0.00952380952380949,

@@ -167,7 +167,7 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, Double compPercent,
-		Integer killCount, boolean killCountIsTracked, Double dropProbability)
+		Integer killCount, Double dropProbability)
 	{
 		// The overlay was fully idle (nothing showing, nothing queued) right before this item arrived,
 		// so it's the first of a fresh batch - the only one that plays a sound when bulkUnlockSfx is on.
@@ -175,7 +175,7 @@ public class CollectionLogOverlay extends Overlay
 		// queue) is treated as part of that same batch, however far apart in time the underlying chat
 		// messages actually were.
 		boolean batchStart = queue.isEmpty() && current == null;
-		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, compPercent, killCount, killCountIsTracked,
+		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, compPercent, killCount,
 			dropProbability, batchStart));
 	}
 
@@ -530,7 +530,7 @@ public class CollectionLogOverlay extends Overlay
 				{
 					return null;
 				}
-				String killCountText = QuantityFormatter.formatNumber(item.getKillCount()) + (item.isKillCountIsTracked() ? "*" : "");
+				String killCountText = QuantityFormatter.formatNumber(item.getKillCount());
 				return new Stat("KC: ", killCountText, PRICE_VALUE_COLOR);
 			case LUCK:
 				if (item.getKillCount() == null || item.getDropProbability() == null)
@@ -576,7 +576,6 @@ public class CollectionLogOverlay extends Overlay
 		boolean highAlch;
 		Double compPercent;
 		Integer killCount;
-		boolean killCountIsTracked;
 		Double dropProbability;
 		boolean batchStart;
 	}

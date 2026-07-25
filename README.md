@@ -1,5 +1,6 @@
 # Collection Log Popup Enhanced
-Displays a popup and sound effects on new collection logs
+Displays a popup and sound effect based on rarity on new collection logs
+![alt text](image.png)
 
 # Setup
 In settings menu, 
@@ -10,21 +11,25 @@ In settings menu,
 # Popup
 The popup will apear on gaining a new collection log slot, and show the icon for the item.
 It also shows a different frame and sound effect based the completion rate of the item and the value (can be configured in settings to be either of the two or a combination)
-At the bottom of the panel two values are displayed (configurable in setting). These values are:
-* KC at which you got the item (if applicable)
+At the top of the panel two values are displayed (configurable in setting). These values are:
+* KC at which you got the item 
+    if no KC is available, it falls back to showing comp%
+* Completion 
+    based on how many other players have this item (https://oldschool.runescape.wiki/w/Collection_log/Table)
+* Luck
+    Compares KC VS the droprate, shows 'very unlucky' to 'very lucky'.
+    Falls back to value of the item if KC and droprate are not available
 * Value of the item (G.E value or H.A)
-* Luck (at which KC did you get the item VS the droprate, shows 'very unlucky' to 'very lucky')
-* Completion (based on how many other players have this item)
 
 # Thanks to:
-C engineer plugin for collection log slot popup
+C engineer plugin for collection log slot popup tie ins
 Trailblazer audio effect for references to scripts on playing audio
 
 The popup backgrounds are from:
 https://bdragon1727.itch.io/custom-border-and-panels-menu-all-part
 and customized by me in photoshop.
 
-Sound effects:
+Sound effects (feel free to change them to your own files):
 Common: https://freesound.org/people/Kenneth_Cooney/sounds/609336/
 Uncommon: https://freesound.org/people/PearceWilsonKing/sounds/238855/
 Rare: https://freesound.org/people/jobro/sounds/198808/

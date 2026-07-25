@@ -64,10 +64,10 @@ public class CollectionLogOverlay extends Overlay
 	// at y=57-58 (verified by pixel-sampling the bundled art - no divider is drawn in code).
 	private static final int CORNER_PADDING_X = 16;
 	private static final int CORNER_LABEL_BASELINE_Y = 22;
-	private static final int CORNER_VALUE_BASELINE_Y = 40;
+	private static final int CORNER_VALUE_BASELINE_Y = 45;
 
 	// Item name - centered, below the baked-in divider.
-	private static final int NAME_BASELINE_Y = 84;
+	private static final int NAME_BASELINE_Y = 90;
 	private static final int NAME_LINE_HEIGHT = 20;
 	private static final int NAME_SIDE_MARGIN = 16;
 
@@ -84,11 +84,11 @@ public class CollectionLogOverlay extends Overlay
 	private static final Color PRICE_LABEL_COLOR = COMMON_COLOR;
 	private static final Color PRICE_VALUE_COLOR = new Color(255, 205, 45);
 
-	private static final float CORNER_LABEL_FONT_SIZE = 9f;
-	private static final float CORNER_VALUE_FONT_SIZE = 14f;
-	private static final float NAME_FONT_SIZE = 19f;
+	private static final float CORNER_LABEL_FONT_SIZE = 16f;
+	private static final float CORNER_VALUE_FONT_SIZE = 19f;
+	private static final float NAME_FONT_SIZE = 27f;
 	private static final float NAME_FONT_MIN_SIZE = 13f;
-	private static final float CAPTION_FONT_SIZE = 13f;
+	private static final float CAPTION_FONT_SIZE = 16f;
 
 	// Fold-open (panel scaleY, pivoted at its top edge) plays first; the icon pop (its own
 	// scale+fade, pivoted at its own center) starts exactly when the fold ends, derived from

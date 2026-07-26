@@ -21,11 +21,9 @@ import net.runelite.client.game.ItemManager;
  * Resolves a collection log item's rarity tier from a composite of two signals:
  * - completion: how many WikiSync-synced players have obtained it (rarer = higher score)
  * - value: GE price, log-scaled since price spans orders of magnitude
- * Composite score is bucketed into tiers by percentile rank across the whole completion dataset,
- * rather than fixed cutoffs, so the tier distribution stays consistent as items get added over time.
- * Pets are matched by name ahead of all of this (see {@link PetItems}) - they're never resolvable
- * through the normal item-id pipeline, since they attach as a follower rather than appearing in
- * the inventory or on the ground.
+ * The composite score is bucketed into tiers by percentile rank across the whole dataset, rather
+ * than fixed cutoffs, so the tier distribution stays consistent as items get added over time.
+ * Pets are matched by name ahead of all of this (see {@link PetItems}).
  */
 @Slf4j
 @Singleton
@@ -36,8 +34,8 @@ public class RarityResolver
 	private static final double COMPLETION_WEIGHT = 0.6;
 	private static final double VALUE_WEIGHT = 0.4;
 
-	// Percentile cutoffs (not user-configurable - exposing these confused players more than it
-	// helped, since it's not obvious what "percentile" means for an already-composite score).
+	// Percentile cutoffs (not user-configurable - "percentile" isn't a meaningful knob for players
+	// to tune on an already-composite score).
 	private static final double UNCOMMON_PERCENTILE = 50;
 	private static final double RARE_PERCENTILE = 80;
 	private static final double VERY_RARE_PERCENTILE = 95;
@@ -99,9 +97,9 @@ public class RarityResolver
 	}
 
 	/**
-	 * @param itemId resolved item id, or -1 if it couldn't be resolved (untradeable and not found
-	 *                in inventory/on the ground - see ItemIdResolver). Falls back to a value-score-only
-	 *                composite using price 0 in that case, same as an item with no GE price at all.
+	 * @param itemId resolved item id, or -1 if it couldn't be resolved (see ItemIdResolver). Falls
+	 *                back to a value-score-only composite using price 0 in that case, same as an
+	 *                item with no GE price at all.
 	 */
 	public RarityResult resolve(int itemId, String itemName)
 	{
@@ -132,8 +130,8 @@ public class RarityResolver
 		{
 			if (completionScore == null)
 			{
-				// No completion data for this item to rank rarity-only against - nothing to back up a
-				// tier with, same reasoning as the no-usable-price fallback below.
+				// No completion data for this item to rank rarity-only against - nothing to back a
+				// tier with.
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
 					dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
 			}
@@ -157,10 +155,9 @@ public class RarityResolver
 		}
 		else if (dataset.positivePricedValueScores.length == 0)
 		{
-			// No completion data for this item AND nothing in the whole dataset has a usable positive
-			// price to rank it against (in practice this means ItemManager's GE price cache hasn't
-			// finished its background load yet). Nothing to legitimately rank against, so don't report
-			// a tier we can't back up.
+			// No completion data for this item, and nothing in the dataset has a usable positive
+			// price to rank it against (in practice, ItemManager's GE price cache hasn't finished
+			// loading yet). Nothing to legitimately rank against.
 			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
 				dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
 		}
@@ -177,8 +174,8 @@ public class RarityResolver
 	}
 
 	/**
-	 * GE price where available; falls back to high alch value for items with no GE price (untradeable,
-	 * or tradeable but unlisted), since a store/alch value is still a better rarity signal than 0.
+	 * GE price where available; falls back to high alch value for items with no GE price, since an
+	 * alch value is still a better rarity signal than 0.
 	 */
 	private int getPrice(int itemId)
 	{
@@ -214,12 +211,11 @@ public class RarityResolver
 	}
 
 	/**
-	 * ItemManager.getItemPrice() sums mapped/bundled item prices with plain int arithmetic, which can
-	 * overflow to a negative (or a huge near-Integer.MAX_VALUE) number for at least one item in the
-	 * dataset. Math.log() of a negative input is NaN, and NaN poisons Math.min/Math.max (and isn't
-	 * caught by a "<=" comparison), corrupting the min/max for every other item's percentile too - so
-	 * prices are clamped to non-negative, AND the "+1" is done in double arithmetic (not int) so a
-	 * price at/near Integer.MAX_VALUE can't wrap back around to negative right back into Math.log().
+	 * ItemManager.getItemPrice() sums bundled item prices with plain int arithmetic, which can
+	 * overflow to a negative (or near-Integer.MAX_VALUE) number for at least one item in the dataset.
+	 * Math.log() of a negative input is NaN, which poisons Math.min/Math.max and corrupts the
+	 * min/max for every other item's percentile too - so prices are clamped to non-negative, and the
+	 * "+1" is done in double arithmetic so a price near Integer.MAX_VALUE can't wrap back to negative.
 	 */
 	private static double logPrice(int price)
 	{
@@ -263,10 +259,9 @@ public class RarityResolver
 	}
 
 	/**
-	 * Rebuilt on every call rather than cached: it's ~1700 in-memory map lookups (no network/disk IO,
-	 * ItemManager's price map is a pre-fetched in-memory snapshot), collection log unlocks are a rare
-	 * event, and recomputing avoids ever serving stale percentile cutoffs from a price snapshot taken
-	 * before ItemManager finished its own background price refresh.
+	 * Rebuilt on every call rather than cached: it's ~1700 in-memory map lookups, collection log
+	 * unlocks are rare, and recomputing avoids serving stale percentile cutoffs from a price
+	 * snapshot taken before ItemManager finished its own background price refresh.
 	 */
 	private Dataset buildDataset()
 	{
@@ -292,13 +287,11 @@ public class RarityResolver
 
 		double[] compositeScores = new double[n];
 		double[] completionScores = new double[n];
-		// Only items with a genuine positive price - if untradeable/unpriced items (price 0, very
-		// common - many collection log items simply have no GE price) were included here, they'd all
-		// tie at the minimum value score, and since percentile = "% of population at or below you",
-		// tying with a huge chunk of the population perversely ranks you near the TOP, not the bottom.
-		// The main composite path doesn't have this problem because completion score still varies and
-		// breaks the tie; this fallback (used when there's no completion data either) has nothing else
-		// to break it with, so the reference population is restricted instead.
+		// Only items with a genuine positive price - unpriced items (price 0, common in this dataset)
+		// would all tie at the minimum value score, and since percentile = "% of population at or
+		// below you", tying with a huge chunk of the population perversely ranks near the TOP. The
+		// main composite path avoids this because completion score still breaks the tie; this
+		// fallback (no completion data either) has nothing else to break it with.
 		double[] positivePricedValueScores = new double[n];
 		int positivePricedCount = 0;
 		double range = logPriceMax - logPriceMin;

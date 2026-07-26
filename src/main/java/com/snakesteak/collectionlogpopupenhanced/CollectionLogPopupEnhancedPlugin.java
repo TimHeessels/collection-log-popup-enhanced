@@ -40,8 +40,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 {
 	private static final Pattern NEW_COLLECTION_LOG_ITEM = Pattern.compile("New item added to your collection log: (.*)");
 
-	// Values of VarbitID.OPTION_COLLECTION_NEW_ITEM that suppress the chat message this plugin relies on
-	// (off, and popup-only) - detection silently does nothing for these settings without this warning.
+	// Settings that suppress the chat message this plugin relies on (off, and popup-only).
 	private static final Set<Integer> COLLECTION_LOG_SETTING_VALUES_WITHOUT_CHAT_MESSAGE = Set.of(0, 2);
 
 	private static final int SETTING_WARNING_THROTTLE_TICKS = 16;
@@ -49,19 +48,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private static final String SETTING_WARNING_MESSAGE = "Collection Log Popup Enhanced: enable the \"Chat message\" "
 		+ "option for Collection log - New addition notification (Settings > All Settings) so new unlocks can be detected.";
 
-	// Dev-only manual trigger: "::clogtest [count]" in the chatbox, picks `count` distinct random item
-	// ids from the rarity dataset (default 1). "::clogtest <item name>" instead runs that exact name
-	// through the real detection pipeline (ItemIdResolver + RarityResolver) as if it were a genuine
-	// collection log chat message - useful for testing against ordinary loot (e.g. goblin drops) that
-	// has no rarity data; RarityResolver falls back to COMMON for anything not in the dataset. Reads
-	// the real (likely absent) correlated kill for kill count/drop rate, same as a genuine unlock -
-	// "::clogtest <item name> <kc>" instead forces that exact kill count, bypassing the real
-	// correlated kill entirely (so there's no known source either - drop rate always comes from
-	// DropRateResolver.dropProbabilityByItemName, same as the real "no correlated kill" case), for
-	// testing how kill count/drop rate render at a specific kc/rate combination without needing a
-	// real kill.
-	// CommandExecuted only fires when the client is launched with --developer-mode (as the gradle "run"
-	// task already does), so this can't be invoked by regular players on a hub-installed build.
+	// Dev-only: "::clogtest [count]" shows random items from the rarity dataset; "::clogtest <item
+	// name> [kc]" runs a specific name through the real detection pipeline, optionally forcing a kill
+	// count. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
 
 	@Inject
@@ -163,9 +152,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			}
 		}
 
-		// If the last token is a non-negative integer, it's a forced kill count (see TEST_COMMAND
-		// javadoc) and everything before it is the item name; otherwise the whole thing is the item
-		// name (existing behavior, no forced kill count).
+		// A non-negative last token is a forced kill count; everything before it is the item name.
 		Integer forcedKillCount = null;
 		int nameArgCount = args.length;
 		if (args.length >= 2)
@@ -218,8 +205,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			return;
 		}
 
-		// Resolution is asynchronous - the id may not be known until a later inventory update or
-		// even the end of the current tick, see ItemIdResolver.resolveIdByName javadoc.
+		// Resolution is asynchronous - see ItemIdResolver.resolveIdByName javadoc.
 		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), forcedKillCount));
 	}
 
@@ -231,18 +217,15 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		String source;
 		if (forcedKillCount != null)
 		{
-			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill
-			// entirely, so there's no known source either; use the same source-agnostic lookup the
-			// real "no correlated kill" path below uses.
+			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill, so
+			// there's no known source either.
 			killCount = forcedKillCount;
 			source = null;
 		}
 		else
 		{
-			// Read now, right before the item is displayed, rather than back when the collection log
-			// chat message first arrived - resolution can be deferred by a tick or more (see
-			// ItemIdResolver), and reading it here also covers the (typical) case where the kill count
-			// message hasn't been processed yet at the moment the collection log message is.
+			// Read now, right before display, rather than when the chat message first arrived -
+			// resolution can be deferred by a tick or more (see ItemIdResolver).
 			KillCountTracker.RecentKill kill = killCountTracker.recentKill();
 
 			killCount = kill != null ? kill.getKillCount() : null;
@@ -252,10 +235,8 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		Double dropProbability = source != null
 			? dropRateResolver.dropProbability(source, itemName)
 			: dropRateResolver.dropProbabilityByItemName(itemName);
-		// Without a known source, an item that's a notable drop from more than one tracked source
-		// has no single rate to show - collect every candidate instead so the overlay can display
-		// them all (see CollectionLogOverlay). Not attempted when a source is known, since a miss
-		// there just means "no known rate from this source", not ambiguity.
+		// Without a known source, a drop from more than one tracked source has no single rate to show -
+		// collect every candidate instead so the overlay can display them all (see CollectionLogOverlay).
 		List<DropRateResolver.SourceRate> ambiguousDropRates = source == null && dropProbability == null
 			? dropRateResolver.dropRatesByItemName(itemName)
 			: List.of();

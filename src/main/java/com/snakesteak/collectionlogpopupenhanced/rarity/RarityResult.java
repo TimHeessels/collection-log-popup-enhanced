@@ -20,8 +20,8 @@ public class RarityResult
 	int datasetSize;
 	double logPriceMin;
 	double logPriceMax;
-	// Always the high alch value regardless of GE availability - unlike price/highAlch above
-	// (which are GE-first, HA-fallback, and feed the rarity score), this lets display code honor
-	// a user preference to always show High alch instead of GE (see ValueDisplayMode).
+	// Always the high alch value regardless of GE availability - unlike price/highAlch above (which
+	// are GE-first, HA-fallback, and feed the rarity score), this lets display code honor a user
+	// preference to always show High alch instead of GE (see ValueDisplayMode).
 	int alchPrice;
 }

@@ -23,16 +23,12 @@ import net.runelite.http.api.item.ItemPrice;
  * Resolves an item's id from its display name - the chat message that drives collection log
  * detection only ever gives us a name, never an id. Checked in order:
  * 1. {@link PetItems}, a static name-to-id lookup (pets attach as a follower NPC rather than
- *    entering the inventory or landing on the ground, so none of the checks below can ever find
- *    one - see {@link PetItems} javadoc)
+ *    entering the inventory or landing on the ground, so none of the checks below can find one)
  * 2. Current inventory (covers the rare case where the inventory update already landed)
- * 3. Ground items tracked via spawn/despawn events (covers monster drops and pickpocketing/stealing
- *    overflow that are still sitting on the ground, unpicked)
+ * 3. Ground items tracked via spawn/despawn events (covers drops and pickpocketing overflow still
+ *    sitting on the ground, unpicked)
  * 4. A deferred diff of the inventory against a pre-message snapshot (see {@link #resolveIdByName})
  * 5. GE search by exact name, once the diff has had a full tick to land and found nothing
- * Ground items are tracked via events rather than scanning the scene, per RuneLite plugin
- * performance conventions; a plugin started mid-session won't see items already on the ground
- * before it registered.
  */
 @Singleton
 public class ItemIdResolver
@@ -60,8 +56,7 @@ public class ItemIdResolver
 	private final ItemManager itemManager;
 	private final Multiset<Integer> groundItemIds = HashMultiset.create();
 
-	// Set while waiting on the inventory update for a name that couldn't be resolved synchronously -
-	// see the javadoc on resolveIdByName for why this has to be deferred at all.
+	// Set while waiting on the inventory update for a name that couldn't be resolved synchronously.
 	private String pendingItemName;
 	private Multiset<Integer> pendingInventorySnapshot;
 	private ResolveCallback pendingCallback;
@@ -123,14 +118,11 @@ public class ItemIdResolver
 	 * @param callback invoked exactly once, on the client thread, with the resolved item id (-1 if it
 	 *                  couldn't be resolved) and which check found it
 	 *
-	 * The chat message announcing a new collection log item is delivered BEFORE the item actually
-	 * appears in the player's inventory - the inventory update arrives as a separate, later
-	 * ItemContainerChanged event (the same ordering the "Collection Log" RuneLite plugin has to work
-	 * around). So a same-name lookup against the live inventory at call time will almost always miss
-	 * for a genuinely new item. Resolution is therefore deferred: take a snapshot of the inventory now,
-	 * then wait for it to change and diff against that snapshot to find the newly-appeared id. If
-	 * nothing shows up in the inventory by the end of the current tick, fall back to a GE search
-	 * (tradeable items only).
+	 * The chat message is delivered BEFORE the item actually appears in the inventory - the update
+	 * arrives as a separate, later ItemContainerChanged event - so a same-name lookup against the
+	 * live inventory at call time will almost always miss. Resolution is therefore deferred: snapshot
+	 * the inventory now, then diff against it once it changes to find the newly-appeared id. If
+	 * nothing shows up by the end of the current tick, fall back to a GE search (tradeable items only).
 	 */
 	public void resolveIdByName(String itemName, ResolveCallback callback)
 	{

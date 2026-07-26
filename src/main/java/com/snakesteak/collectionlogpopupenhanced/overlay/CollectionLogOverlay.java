@@ -43,43 +43,32 @@ public class CollectionLogOverlay extends Overlay
 	private static final int PANEL_WIDTH = 379;
 	private static final int PANEL_HEIGHT = 128;
 
-	// Extra breathing room above the panel (and the icon, which already overhangs above the panel's
-	// own top edge) so the whole notification doesn't sit flush against the very top of the screen.
+	// Breathing room above the panel so it doesn't sit flush against the top of the screen.
 	private static final int TOP_MARGIN = 40;
 
-	// The icon slot is a separate element from the panel - it's centered horizontally above the
-	// panel and straddles its top edge (roughly half the icon sits above the panel, half overlaps
-	// it), matching the bundled IconPanel1-4.png art (89x89) and animating independently of the
-	// panel's own fold-open transform.
+	// The icon slot is centered above the panel and straddles its top edge, matching the bundled
+	// IconPanel1-4.png art (89x89), and animates independently of the panel's fold-open transform.
 	private static final int ICON_CANVAS_SIZE = 89;
 	private static final int ICON_X = (PANEL_WIDTH - ICON_CANVAS_SIZE) / 2;
 	private static final int ICON_Y = -ICON_CANVAS_SIZE / 2;
-	// Item sprites are a fixed 36x32 (net.runelite.api.Constants.ITEM_SPRITE_WIDTH/HEIGHT) - far
-	// smaller than the icon slot's ~71px usable interior, so scale the longer side up to this
-	// before centering it.
+	// Item sprites are a fixed 36x32 - far smaller than the icon slot's usable interior, so scale
+	// the longer side up to this before centering it.
 	private static final int ICON_TARGET_SIZE = 66;
-	// +3 nudges just the sprite right of the icon frame's true center - the sprite art itself isn't
-	// visually centered within its own bounding box, so centering it within the (correctly centered)
-	// icon frame left it looking off-center on the panel. The icon frame/background stay at true
-	// center; only the sprite draw position below is shifted.
+	// The sprite art isn't visually centered within its own bounding box, so nudge it right of the
+	// icon frame's true center to compensate.
 	private static final int ICON_SPRITE_X_OFFSET = 3;
 
-	// Top-left / top-right stacked label+value blocks. Both stay clear of the icon's horizontal
-	// footprint (ICON_X to ICON_X+ICON_CANVAS_SIZE) even though the icon dips down into this same
-	// vertical band, and stay above the divider line that's already baked into the background art
-	// at y=57-58 (verified by pixel-sampling the bundled art - no divider is drawn in code).
+	// Top-left / top-right stacked label+value blocks, clear of the icon's horizontal footprint and
+	// above the divider line baked into the background art at y=57-58.
 	private static final int CORNER_PADDING_X = 16;
 	private static final int CORNER_LABEL_BASELINE_Y = 22;
 	private static final int CORNER_VALUE_BASELINE_Y = 45;
-	// Ambiguous Drop rate values (see PanelStat#DROP_RATE) can show up to 2 stacked value lines
-	// instead of the usual 1, in a smaller font so both still fit above the item name. Starts higher
-	// than CORNER_VALUE_BASELINE_Y - stacking both lines below that baseline would run the second
-	// line's descenders into the divider baked into the background art at y=57-58.
+	// Ambiguous Drop rate values (see PanelStat#DROP_RATE) can show up to 2 stacked value lines in a
+	// smaller font so both still fit above the item name, without the second line's descenders
+	// running into the divider.
 	private static final int CORNER_MULTI_VALUE_FIRST_BASELINE_Y = 34;
 	private static final int CORNER_MULTI_VALUE_LINE_HEIGHT = 16;
 	private static final float CORNER_MULTI_VALUE_FONT_SIZE = 14f;
-	// Both corners' text is clear of the icon's horizontal footprint (see ICON_X/ICON_CANVAS_SIZE)
-	// - used to wrap/truncate corner stat text so it never runs into the icon.
 	private static final int CORNER_TEXT_MAX_WIDTH = ICON_X - CORNER_PADDING_X;
 
 	// Item name - centered, below the baked-in divider.
@@ -87,7 +76,6 @@ public class CollectionLogOverlay extends Overlay
 	private static final int NAME_LINE_HEIGHT = 20;
 	private static final int NAME_SIDE_MARGIN = 16;
 
-	// Caption - centered, replaces the old top-left "Collection log" title.
 	private static final String CAPTION_TEXT = "Collection log slot";
 	private static final int CAPTION_BASELINE_Y = 115;
 
@@ -107,10 +95,8 @@ public class CollectionLogOverlay extends Overlay
 	private static final float CAPTION_FONT_SIZE = 16f;
 
 	// Fold-open (panel scaleY, pivoted at its top edge) plays first; the icon pop (its own
-	// scale+fade, pivoted at its own center) starts exactly when the fold ends, derived from
-	// FOLD_MILLIS rather than a separately-hardcoded delay so the two can't drift apart. Hold
-	// length is user-configurable (see config.overlayDisplaySeconds()). Fade-out dissolves the
-	// panel and icon together and is the only closing animation - there's no reverse-fold.
+	// scale+fade, pivoted at its own center) starts exactly when the fold ends. Hold length is
+	// user-configurable (see config.overlayDisplaySeconds()). Fade-out is the only closing animation.
 	private static final long FOLD_MILLIS = 550;
 	private static final long ICON_POP_MILLIS = 400;
 	private static final long FADE_MILLIS = 400;
@@ -130,15 +116,10 @@ public class CollectionLogOverlay extends Overlay
 	private final Font nameFont;
 	private final Font captionFont;
 
-	// Only ever written/read from the client thread (enqueue() from chat/command event handlers,
-	// render() from the client's render pass), so no synchronization is needed.
+	// Only ever written/read from the client thread, so no synchronization is needed.
 	private final Deque<PendingItem> queue = new ArrayDeque<>();
 
 	private PendingItem current;
-	// A single continuous timeline (elapsed ms since this notification started), rather than a
-	// mutable phase/phaseStartMillis pair - the fold, icon-pop, hold and fade-out windows are all
-	// just fixed offsets/durations along it, so the icon's start delay can reference FOLD_MILLIS
-	// directly instead of drifting out of sync with a separately-tracked phase transition.
 	private long notificationStartMillis;
 
 	@Inject
@@ -154,8 +135,8 @@ public class CollectionLogOverlay extends Overlay
 		backgrounds.put(RarityTier.RARE, loadImage("Backgrounds/BackgroundPanel3.png"));
 		BufferedImage veryRareBackground = loadImage("Backgrounds/BackgroundPanel4.png");
 		backgrounds.put(RarityTier.VERY_RARE, veryRareBackground);
-		// No dedicated pet artwork is bundled - pets are the rarest category, so they reuse the
-		// very rare border; the pink item-name text still distinguishes them from a regular drop.
+		// No dedicated pet artwork is bundled - pets reuse the very rare border; the pink
+		// item-name text still distinguishes them from a regular drop.
 		backgrounds.put(RarityTier.PET, veryRareBackground);
 
 		iconFrames.put(RarityTier.COMMON, loadImage("Icons/IconPanel1.png"));
@@ -187,11 +168,8 @@ public class CollectionLogOverlay extends Overlay
 	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
 		Double compPercent, Integer killCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
-		// The overlay was fully idle (nothing showing, nothing queued) right before this item arrived,
-		// so it's the first of a fresh batch - the only one that plays a sound when bulkUnlockSfx is on.
-		// Anything that arrives while the overlay is still working through a previous item (or its own
-		// queue) is treated as part of that same batch, however far apart in time the underlying chat
-		// messages actually were.
+		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
+		// batch - the only one that plays a sound when bulkUnlockSfx is on.
 		boolean batchStart = queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
 			dropProbability, ambiguousDropRates, batchStart));
@@ -211,13 +189,9 @@ public class CollectionLogOverlay extends Overlay
 
 		if (current == null)
 		{
-			// Report the same size used when populated instead of null/0 - RuneLite resets an
-			// overlay's cached bounds to (0, 0) whenever render() returns null, and TOP_CENTER
-			// positioning centers each frame using the *previous* frame's bounds. Returning 0 here
-			// would make the panel start centered around half of nothing, then visibly jump left
-			// once the real width is reported on the following frame. The icon overhangs above the
-			// panel (see ICON_Y), but that overhang isn't included here - RuneLite doesn't clip
-			// overlay drawing to this reported size, it's only used for next-frame positioning.
+			// Report the panel's real width instead of 0 - RuneLite's TOP_CENTER positioning centers
+			// each frame using the *previous* frame's bounds, so returning 0 here would make the
+			// panel jump left once its real width is reported on the next frame it's shown.
 			return new Dimension(PANEL_WIDTH, 0);
 		}
 
@@ -234,15 +208,15 @@ public class CollectionLogOverlay extends Overlay
 		graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
 		graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
 
-		// Push everything (panel + icon overhang) down by TOP_MARGIN before capturing the base
-		// transform both animated pieces reset back to between draws.
+		// Push everything down by TOP_MARGIN before capturing the base transform both animated
+		// pieces reset back to between draws.
 		graphics.translate(0, TOP_MARGIN);
 		AffineTransform base = graphics.getTransform();
 		Composite originalComposite = graphics.getComposite();
 
 		// --- panel: scaleY-only fold, pivoted at its own top edge, plus whatever's left of the
-		// fade-out alpha. Corner stats/name/caption are drawn here too (not in a separate crossfade
-		// step) so they reveal progressively as the fold grows, top edge first.
+		// fade-out alpha. Corner stats/name/caption are drawn here too so they reveal progressively
+		// as the fold grows, top edge first.
 		graphics.translate(PANEL_WIDTH / 2.0, 0);
 		graphics.scale(1.0, foldT);
 		graphics.translate(-PANEL_WIDTH / 2.0, 0);
@@ -250,8 +224,8 @@ public class CollectionLogOverlay extends Overlay
 		Shape originalClip = graphics.getClip();
 		if (foldRaw < 1f)
 		{
-			// Still folding - clip to the panel's own bounds (already scaled by the transform above)
-			// so nothing draws above/below where the fold has actually reached yet.
+			// Still folding - clip to the panel's own (already scaled) bounds so nothing draws
+			// past where the fold has actually reached yet.
 			graphics.clip(new Rectangle2D.Float(0, 0, PANEL_WIDTH, PANEL_HEIGHT));
 		}
 		if (fadeAlpha < 1f)
@@ -296,10 +270,9 @@ public class CollectionLogOverlay extends Overlay
 
 	private void drawItemSprite(Graphics2D graphics)
 	{
-		// A negative id means ItemIdResolver couldn't identify the item (untradeable and not seen
-		// in inventory/on the ground - see ItemIdResolver javadoc). ItemManager.getImage() doesn't
-		// handle that gracefully - it silently returns an unrelated cache sprite rather than null
-		// or throwing - so the icon slot is left blank instead of showing that garbage image.
+		// A negative id means ItemIdResolver couldn't identify the item. ItemManager.getImage()
+		// doesn't handle that gracefully - it silently returns an unrelated cached sprite rather
+		// than null or throwing - so the icon slot is left blank instead of showing garbage.
 		if (current.getItemId() < 0)
 		{
 			return;
@@ -337,8 +310,7 @@ public class CollectionLogOverlay extends Overlay
 		if (rightStat != null)
 		{
 			// Right corner: label and each value line are independently right-aligned to the panel
-			// edge, not sharing one x - the label ("Value") is usually much shorter than the value
-			// ("1,121,123 gp") and would look left-stranded if both used the same starting x.
+			// edge, since the label is usually much shorter than the value.
 			drawCornerStat(graphics, rightStat, PANEL_WIDTH - CORNER_PADDING_X, true, cornerLabelMetrics, cornerValueMetrics);
 		}
 
@@ -371,8 +343,7 @@ public class CollectionLogOverlay extends Overlay
 		graphics.drawString(stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, CORNER_LABEL_BASELINE_Y);
 
 		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
-		// a smaller font and tighter line spacing than the usual single-line case, so both still fit
-		// above the item name.
+		// a smaller font and tighter line spacing so both still fit above the item name.
 		boolean multiLine = stat.getValueLines().size() > 1;
 		Font valueFont = multiLine ? cornerMultiValueFont : valueMetrics.getFont();
 		FontMetrics activeValueMetrics = multiLine ? graphics.getFontMetrics(valueFont) : valueMetrics;
@@ -383,8 +354,8 @@ public class CollectionLogOverlay extends Overlay
 		int valueY = multiLine ? CORNER_MULTI_VALUE_FIRST_BASELINE_Y : CORNER_VALUE_BASELINE_Y;
 		for (String rawLine : stat.getValueLines())
 		{
-			// Only the multi-line case bothers truncating - the usual single-line stats already fit
-			// comfortably, but a fraction's denominator has no natural length cap.
+			// Only the multi-line case bothers truncating - a fraction's denominator has no
+			// natural length cap, unlike the usual single-line stats.
 			String line = multiLine ? truncate(graphics, rawLine, valueFont, CORNER_TEXT_MAX_WIDTH) : rawLine;
 			graphics.drawString(line, rightAligned ? edgeX - activeValueMetrics.stringWidth(line) : edgeX, valueY);
 			valueY += lineHeight;
@@ -399,9 +370,8 @@ public class CollectionLogOverlay extends Overlay
 			if (current != null)
 			{
 				notificationStartMillis = now;
-				// Fired here rather than at enqueue() time so playback is spaced out to match the visual
-				// reveal of each item, instead of every item in a burst firing its sound at once (which
-				// used to overlap/cut each other off on top of the client's audio mixer).
+				// Fired here rather than at enqueue() time so playback is spaced out to match each
+				// item's visual reveal, instead of a whole burst firing its sound at once.
 				if (!config.bulkUnlockSfx() || current.isBatchStart())
 				{
 					soundManager.play(current.getTier());
@@ -440,8 +410,7 @@ public class CollectionLogOverlay extends Overlay
 
 	/**
 	 * Wraps the item name onto up to 2 lines, shrinking the font (down to {@link #NAME_FONT_MIN_SIZE})
-	 * only if the name still doesn't fit both lines at that size - e.g. a single word longer than
-	 * the panel is wide. Any overflow left after that is truncated with an ellipsis on the 2nd line.
+	 * if it still doesn't fit. Any overflow left after that is truncated with an ellipsis.
 	 */
 	private static FittedName fitName(Graphics2D graphics, String text, Font baseFont, int maxWidth)
 	{
@@ -587,10 +556,8 @@ public class CollectionLogOverlay extends Overlay
 				{
 					return new Stat("Drop rate: ", List.of(formatFraction(item.getDropProbability())), PRICE_VALUE_COLOR);
 				}
-				// No single known rate - if it's a notable drop from exactly 2 tracked sources, show
-				// both rather than hiding the stat entirely (see DropRateResolver#dropRatesByItemName).
-				// More than that doesn't comfortably fit, so it falls through to Value like an unknown
-				// item would.
+				// No single known rate - if it's a drop from exactly 2 tracked sources, show both
+				// instead of hiding the stat; more than that doesn't fit, so fall through to Value.
 				List<DropRateResolver.SourceRate> ambiguous = item.getAmbiguousDropRates();
 				if (ambiguous.size() != 2)
 				{

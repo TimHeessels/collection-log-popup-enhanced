@@ -14,11 +14,8 @@ import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Resolves how likely a collection log item was to drop from a given source (any real
- * collection-log-eligible NPC, chest, or activity - not just kill-count-tracked bosses) per kill,
- * from a bundled dataset generated offline by scripts/generate-drop-rates.py (see that script's
- * docstring for where the data comes from and its known gaps - it's a best-effort dataset covering
- * every source the wiki has structured drop-table data for, not a hand-picked or exhaustive one).
+ * Resolves how likely a collection log item was to drop from a given source, per kill, from a
+ * bundled dataset generated offline by scripts/generate-drop-rates.py.
  */
 @Slf4j
 @Singleton
@@ -54,13 +51,10 @@ public class DropRateResolver
 	/**
 	 * @param itemName the collection log item's display name
 	 * @return the per-kill drop probability (0-1) of {@code itemName}, searched across every source
-	 *         in the dataset rather than one specific source - used when there's no correlated kill
-	 *         to read a source from (see {@link com.snakesteak.collectionlogpopupenhanced.overlay.PanelStat#DROP_RATE}).
-	 *         Only returns a value when the item name maps to exactly one source's entry; if it's a
-	 *         notable drop from more than one tracked source at different rates, there's no single
-	 *         rate to show without knowing which one it came from, so this returns null the same as
-	 *         an unknown item rather than guessing - see {@link #dropRatesByItemName(String)} to get
-	 *         all of them instead.
+	 *         in the dataset - used when there's no correlated kill to read a source from. Only
+	 *         returns a value when the item maps to exactly one source; if it's a notable drop from
+	 *         more than one at different rates, returns null rather than guessing - see
+	 *         {@link #dropRatesByItemName(String)} to get all of them instead.
 	 */
 	public Double dropProbabilityByItemName(String itemName)
 	{
@@ -71,9 +65,9 @@ public class DropRateResolver
 	/**
 	 * @param itemName the collection log item's display name
 	 * @return every (source, drop probability) pair {@code itemName} is a notable drop for, across
-	 *         the whole dataset - empty if it's not a notable drop from any tracked source. Used to
-	 *         show all the candidate rates for an item that's ambiguous across sources, since
-	 *         {@link #dropProbabilityByItemName(String)} deliberately returns null for those.
+	 *         the whole dataset - empty if none. Used to show all candidate rates for an item that's
+	 *         ambiguous across sources, since {@link #dropProbabilityByItemName(String)} returns null
+	 *         for those.
 	 */
 	public List<SourceRate> dropRatesByItemName(String itemName)
 	{

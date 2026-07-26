@@ -6,13 +6,11 @@ import java.util.TreeMap;
 import net.runelite.api.gameval.ItemID;
 
 /**
- * Maps a collection log pet's display name (as it appears in the "New item added to your
- * collection log" chat message) to its item id.
+ * Maps a collection log pet's display name to its item id.
  *
  * Pets never enter the player's inventory or land on the ground when unlocked - they attach
  * directly as a follower NPC - so {@link ItemIdResolver}'s inventory/ground/GE-search pipeline can
- * never find them, and most are untradeable anyway so the GE fallback wouldn't help either. Their
- * ids are looked up here instead, by name.
+ * never find them. Their ids are looked up here instead, by name.
  *
  * Some pets have several item ids (recolours, alternate poses, or a variant per skilling
  * material) - only one representative id is kept per pet, since it's only used to render an icon.

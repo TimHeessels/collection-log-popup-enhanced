@@ -6,7 +6,15 @@ This document contains all the unique mechanics or collection log dropping monst
 * Any minigame that uses searches (see chapter below) as we cannot reliably check the count
 * Skilling pets, dont have KC (we could show xp and or level in the future)
 * Chompy bird hunting already uses its own KC system for the rewards so not needed
-* All non-boss monsters (too complicated to track or not reliable)
+* All non-boss monsters (not reliable: regular monsters don't produce a "Your X kill count is: N"
+  chat message at all, so there's no KC to correlate a collection log unlock with, and thus no
+  "Luck" stat. Note this is no longer a *data-fetching* limitation - drop-rates.json is generated
+  from the wiki's own structured "dropsline" bucket, driven by the wiki's full canonical collection
+  log item list (see generate-drop-rates.py), so it already covers every source with a real drop
+  table (734 sources as of writing), not just bosses. When there's no KC to compute Luck against,
+  the bottom-right overlay stat falls back to a bare "Drop rate" (e.g. "1/512") via
+  DropRateResolver.dropProbabilityByItemName - so the *rate* is still surfaced for non-boss drops,
+  just without a Luck qualifier, without needing a KC at all.)
 
 # Clue scrolls
 Clue scrolls (caskets), should just work as they appear in inventory (or ground) and unlock collection log. A 'You have completed XX *type* Treasure Trails.' message appears before the clog so we could count that as 'KC'.

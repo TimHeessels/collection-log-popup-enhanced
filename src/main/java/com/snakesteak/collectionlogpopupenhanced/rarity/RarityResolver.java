@@ -107,15 +107,16 @@ public class RarityResolver
 	{
 		int price = getPrice(itemId);
 		boolean highAlch = isHighAlchPrice(itemId);
+		int alchPrice = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
 
 		if (PetItems.names().contains(itemName))
 		{
-			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercentById.get(itemId), null, 0, 100, 0, 0, 0);
+			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercentById.get(itemId), null, 0, 100, 0, 0, 0, alchPrice);
 		}
 
 		if (compPercentById.isEmpty())
 		{
-			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, 0, 0, 0, 0, 0);
+			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, 0, 0, 0, 0, 0, alchPrice);
 		}
 
 		Dataset dataset = buildDataset();
@@ -134,7 +135,7 @@ public class RarityResolver
 				// No completion data for this item to rank rarity-only against - nothing to back up a
 				// tier with, same reasoning as the no-usable-price fallback below.
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-					dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax);
+					dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
 			}
 			score = completionScore;
 			distribution = dataset.completionScores;
@@ -144,7 +145,7 @@ public class RarityResolver
 			if (dataset.positivePricedValueScores.length == 0)
 			{
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, compPercent, completionScore,
-					valueScore, 0, dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax);
+					valueScore, 0, dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
 			}
 			score = valueScore;
 			distribution = dataset.positivePricedValueScores;
@@ -161,7 +162,7 @@ public class RarityResolver
 			// finished its background load yet). Nothing to legitimately rank against, so don't report
 			// a tier we can't back up.
 			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-				dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax);
+				dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
 		}
 		else
 		{
@@ -172,7 +173,7 @@ public class RarityResolver
 		double percentile = percentileRank(distribution, score);
 		RarityTier tier = bucketByPercentile(percentile);
 		return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, percentile,
-			dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax);
+			dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
 	}
 
 	/**

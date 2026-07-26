@@ -7,6 +7,7 @@ import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -15,8 +16,11 @@ import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.CommandExecuted;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.events.GameTick;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.config.ConfigManager;
@@ -42,11 +46,20 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 	private static final int SETTING_WARNING_THROTTLE_TICKS = 16;
 
+	private static final String SETTING_WARNING_MESSAGE = "Collection Log Popup Enhanced: enable the \"Chat message\" "
+		+ "option for Collection log - New addition notification (Settings > All Settings) so new unlocks can be detected.";
+
 	// Dev-only manual trigger: "::clogtest [count]" in the chatbox, picks `count` distinct random item
 	// ids from the rarity dataset (default 1). "::clogtest <item name>" instead runs that exact name
 	// through the real detection pipeline (ItemIdResolver + RarityResolver) as if it were a genuine
 	// collection log chat message - useful for testing against ordinary loot (e.g. goblin drops) that
-	// has no rarity data; RarityResolver falls back to COMMON for anything not in the dataset.
+	// has no rarity data; RarityResolver falls back to COMMON for anything not in the dataset. Reads
+	// the real (likely absent) correlated kill for kill count/drop rate, same as a genuine unlock -
+	// "::clogtest <item name> <kc>" instead forces that exact kill count, bypassing the real
+	// correlated kill entirely (so there's no known source either - drop rate always comes from
+	// DropRateResolver.dropProbabilityByItemName, same as the real "no correlated kill" case), for
+	// testing how kill count/drop rate render at a specific kc/rate combination without needing a
+	// real kill.
 	// CommandExecuted only fires when the client is launched with --developer-mode (as the gradle "run"
 	// task already does), so this can't be invoked by regular players on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
@@ -79,6 +92,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private CollectionLogOverlay collectionLogOverlay;
 
 	private int lastSettingWarningTick = -1;
+	private boolean pendingLoginSettingCheck = false;
 
 	@Override
 	protected void startUp() throws Exception
@@ -111,7 +125,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (matcher.matches())
 		{
 			String itemName = Text.removeTags(matcher.group(1));
-			handleNewCollectionLogItem(null, itemName);
+			handleNewCollectionLogItem(null, itemName, null);
 		}
 	}
 
@@ -149,8 +163,30 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			}
 		}
 
-		String itemName = String.join(" ", args);
-		handleNewCollectionLogItem(null, itemName);
+		// If the last token is a non-negative integer, it's a forced kill count (see TEST_COMMAND
+		// javadoc) and everything before it is the item name; otherwise the whole thing is the item
+		// name (existing behavior, no forced kill count).
+		Integer forcedKillCount = null;
+		int nameArgCount = args.length;
+		if (args.length >= 2)
+		{
+			try
+			{
+				int kc = Integer.parseInt(args[args.length - 1]);
+				if (kc >= 0)
+				{
+					forcedKillCount = kc;
+					nameArgCount = args.length - 1;
+				}
+			}
+			catch (NumberFormatException e)
+			{
+				// Last token isn't a kill count - the whole thing is the item name.
+			}
+		}
+
+		String itemName = String.join(" ", Arrays.copyOfRange(args, 0, nameArgCount));
+		handleNewCollectionLogItem(null, itemName, forcedKillCount);
 	}
 
 	private void testRandomDatasetItems(int count)
@@ -170,40 +206,65 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			int canonicalId = itemManager.canonicalize(itemId);
 			String itemName = itemManager.getItemComposition(canonicalId).getName();
-			handleNewCollectionLogItem(canonicalId, itemName);
+			handleNewCollectionLogItem(canonicalId, itemName, null);
 		}
 	}
 
-	private void handleNewCollectionLogItem(Integer knownItemId, String itemName)
+	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, Integer forcedKillCount)
 	{
 		if (knownItemId != null)
 		{
-			handleResolvedItem(knownItemId, itemName, "known");
+			handleResolvedItem(knownItemId, itemName, "known", forcedKillCount);
 			return;
 		}
 
 		// Resolution is asynchronous - the id may not be known until a later inventory update or
 		// even the end of the current tick, see ItemIdResolver.resolveIdByName javadoc.
-		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString()));
+		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), forcedKillCount));
 	}
 
-	private void handleResolvedItem(int itemId, String itemName, String resolvedVia)
+	private void handleResolvedItem(int itemId, String itemName, String resolvedVia, Integer forcedKillCount)
 	{
 		RarityResult result = rarityResolver.resolve(itemId, itemName);
-		// Read now, right before the item is displayed, rather than back when the collection log
-		// chat message first arrived - resolution can be deferred by a tick or more (see
-		// ItemIdResolver), and reading it here also covers the (typical) case where the kill count
-		// message hasn't been processed yet at the moment the collection log message is.
-		KillCountTracker.RecentKill kill = killCountTracker.recentKill();
 
-		Integer killCount = kill != null ? kill.getKillCount() : null;
-		Double dropProbability = kill != null ? dropRateResolver.dropProbability(kill.getSource(), itemName) : null;
+		Integer killCount;
+		String source;
+		if (forcedKillCount != null)
+		{
+			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill
+			// entirely, so there's no known source either; use the same source-agnostic lookup the
+			// real "no correlated kill" path below uses.
+			killCount = forcedKillCount;
+			source = null;
+		}
+		else
+		{
+			// Read now, right before the item is displayed, rather than back when the collection log
+			// chat message first arrived - resolution can be deferred by a tick or more (see
+			// ItemIdResolver), and reading it here also covers the (typical) case where the kill count
+			// message hasn't been processed yet at the moment the collection log message is.
+			KillCountTracker.RecentKill kill = killCountTracker.recentKill();
 
-		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {})",
-			itemName, itemId, resolvedVia, result, killCount, dropProbability);
+			killCount = kill != null ? kill.getKillCount() : null;
+			source = kill != null ? kill.getSource() : null;
+		}
+
+		Double dropProbability = source != null
+			? dropRateResolver.dropProbability(source, itemName)
+			: dropRateResolver.dropProbabilityByItemName(itemName);
+		// Without a known source, an item that's a notable drop from more than one tracked source
+		// has no single rate to show - collect every candidate instead so the overlay can display
+		// them all (see CollectionLogOverlay). Not attempted when a source is known, since a miss
+		// there just means "no known rate from this source", not ambiguity.
+		List<DropRateResolver.SourceRate> ambiguousDropRates = source == null && dropProbability == null
+			? dropRateResolver.dropRatesByItemName(itemName)
+			: List.of();
+
+		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {}, ambiguous rates {})",
+			itemName, itemId, resolvedVia, result, killCount, dropProbability, ambiguousDropRates);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getCompPercent(), killCount, dropProbability);
+			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates);
 	}
 
 	@Subscribe
@@ -214,7 +275,38 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			return;
 		}
 
-		if (!COLLECTION_LOG_SETTING_VALUES_WITHOUT_CHAT_MESSAGE.contains(varbitChanged.getValue()))
+		warnIfSettingBreaksDetection(varbitChanged.getValue());
+	}
+
+	@Subscribe
+	public void onGameStateChanged(GameStateChanged gameStateChanged)
+	{
+		if (gameStateChanged.getGameState() != GameState.LOGGED_IN)
+		{
+			return;
+		}
+
+		// Account settings (like this varbit) aren't necessarily synced from the server yet at the
+		// moment this event fires, so defer the read to the next tick rather than risk reading a
+		// stale default value here.
+		pendingLoginSettingCheck = true;
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick gameTick)
+	{
+		if (!pendingLoginSettingCheck)
+		{
+			return;
+		}
+		pendingLoginSettingCheck = false;
+
+		warnIfSettingBreaksDetection(client.getVarbitValue(VarbitID.OPTION_COLLECTION_NEW_ITEM));
+	}
+
+	private void warnIfSettingBreaksDetection(int settingValue)
+	{
+		if (!COLLECTION_LOG_SETTING_VALUES_WITHOUT_CHAT_MESSAGE.contains(settingValue))
 		{
 			return;
 		}
@@ -225,7 +317,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		}
 		lastSettingWarningTick = client.getTickCount();
 
-		log.debug("Please enable the chat message option for \"Collection log - New addition notification\" in your game settings for Collection Log Popup Enhanced to detect new unlocks!");
+		client.addChatMessage(ChatMessageType.CONSOLE, "", SETTING_WARNING_MESSAGE, null);
 	}
 
 	@Provides

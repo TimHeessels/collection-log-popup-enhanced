@@ -12,14 +12,14 @@ In settings menu,
 The popup will apear on gaining a new collection log slot, and show the icon for the item.
 It also shows a different frame and sound effect based the completion rate of the item and the value (can be configured in settings to be either of the two or a combination)
 At the top of the panel two values are displayed (configurable in setting). These values are:
-* KC at which you got the item 
-    if no KC is available, it falls back to showing comp%
-* Completion 
-    based on how many other players have this item (https://oldschool.runescape.wiki/w/Collection_log/Table)
-* Luck
-    Compares KC VS the droprate, shows 'very unlucky' to 'very lucky'.
-    Falls back to value of the item if KC and droprate are not available
-* Value of the item (G.E value or H.A)
+- KC at which you got the item 
+-- if no KC is available, it falls back to showing comp%
+- Completion 
+-- based on how many other players have this item (https://oldschool.runescape.wiki/w/Collection_log/Table)
+- Drop rate
+-- Shows drop rate of the item if available. Falls back to value if not.
+- Value of the item
+-- Based on G.E or High alch.
 
 # Thanks to:
 C engineer plugin for collection log slot popup tie ins

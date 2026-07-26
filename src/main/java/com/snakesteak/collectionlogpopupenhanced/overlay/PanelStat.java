@@ -10,7 +10,7 @@ public enum PanelStat
 	VALUE("Value"),
 	RARITY("Completion"),
 	KILL_COUNT("Kill count"),
-	LUCK("Luck");
+	DROP_RATE("Drop rate");
 
 	private final String label;
 

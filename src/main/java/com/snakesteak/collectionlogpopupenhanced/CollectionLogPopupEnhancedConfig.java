@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced;
 
 import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
+import com.snakesteak.collectionlogpopupenhanced.overlay.ValueDisplayMode;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityBasis;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
@@ -70,15 +71,27 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "valueDisplayMode",
+		name = "Value shown as",
+		description = "Which price the Value stat shows. GE value still falls back to High alch when an item "
+			+ "has no GE price (untradeable, or tradeable but unlisted)",
+		section = overlaySection
+	)
+	default ValueDisplayMode valueDisplayMode()
+	{
+		return ValueDisplayMode.GE_VALUE;
+	}
+
+	@ConfigItem(
 		keyName = "rightPanelStat",
 		name = "Bottom-right stat",
-		description = "Preferred stat for the bottom-right of the overlay. Luck falls back to Value when there's "
-			+ "no correlated kill for the item",
+		description = "Preferred stat for the bottom-right of the overlay. Drop rate falls back to Value when "
+			+ "there's no known drop rate for the item, or it's ambiguous across more than 2 sources",
 		section = overlaySection
 	)
 	default RightPanelStat rightPanelStat()
 	{
-		return RightPanelStat.LUCK;
+		return RightPanelStat.DROP_RATE;
 	}
 
 	@ConfigItem(

@@ -1,11 +1,13 @@
 package com.snakesteak.collectionlogpopupenhanced.droprate;
 
 import com.google.gson.Gson;
+import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Loaded against the real bundled drop-rates.json (see scripts/generate-drop-rates.py). Abyssal
@@ -52,5 +54,45 @@ public class DropRateResolverTest
 	public void knownDropRateMatchesWikiFraction()
 	{
 		assertEquals(0.01, resolver.dropProbability("Abyssal Sire", "Unsired"), 0.0001);
+	}
+
+	@Test
+	public void itemNameLookupResolvesAnUnambiguousItem()
+	{
+		// Jar of souls only drops from Cerberus - single source, so this should resolve the same
+		// as looking it up by source directly.
+		assertEquals(resolver.dropProbability("Cerberus", "Jar of souls"),
+			resolver.dropProbabilityByItemName("Jar of souls"), 0.0001);
+	}
+
+	@Test
+	public void itemNameLookupReturnsNullForAnAmbiguousItem()
+	{
+		// Hydra tail drops from more than one real source (Alchemical Hydra, Colossal Hydra, Hydra)
+		// at different rates - there's no single correct rate to show without knowing which one, so
+		// this must return null rather than guessing.
+		assertNull(resolver.dropProbabilityByItemName("Hydra tail"));
+	}
+
+	@Test
+	public void dropRatesByItemNameReturnsEveryCandidateForAnAmbiguousItem()
+	{
+		List<DropRateResolver.SourceRate> matches = resolver.dropRatesByItemName("Hydra tail");
+		assertEquals(3, matches.size());
+		assertTrue(matches.stream().anyMatch(match -> match.getSource().equalsIgnoreCase("Alchemical Hydra")));
+	}
+
+	@Test
+	public void dropRatesByItemNameReturnsSingleEntryForAnUnambiguousItem()
+	{
+		List<DropRateResolver.SourceRate> matches = resolver.dropRatesByItemName("Jar of souls");
+		assertEquals(1, matches.size());
+		assertEquals("Cerberus", matches.get(0).getSource());
+	}
+
+	@Test
+	public void dropRatesByItemNameReturnsEmptyForAnUnknownItem()
+	{
+		assertTrue(resolver.dropRatesByItemName("Not a real item").isEmpty());
 	}
 }

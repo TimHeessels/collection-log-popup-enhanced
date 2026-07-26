@@ -1,13 +1,13 @@
 package com.snakesteak.collectionlogpopupenhanced.overlay;
 
 /**
- * User-facing choices for the bottom-right stat. Luck is the only one of the two that can be
- * unavailable for an item (no correlated kill), in which case it falls back to Value - see
- * {@link CollectionLogOverlay}.
+ * User-facing choices for the bottom-right stat. Drop rate can be unavailable for an item (no
+ * known drop rate, or ambiguous across more than 2 sources), in which case it falls back to Value -
+ * see {@link CollectionLogOverlay}.
  */
 public enum RightPanelStat
 {
-	LUCK("Luck", PanelStat.LUCK),
+	DROP_RATE("Drop rate", PanelStat.DROP_RATE),
 	VALUE("Value", PanelStat.VALUE);
 
 	private final String label;

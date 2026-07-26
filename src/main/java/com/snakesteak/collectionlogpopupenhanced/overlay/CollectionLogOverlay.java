@@ -1,7 +1,7 @@
 package com.snakesteak.collectionlogpopupenhanced.overlay;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
-import com.snakesteak.collectionlogpopupenhanced.droprate.LuckTier;
+import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityTier;
 import com.snakesteak.collectionlogpopupenhanced.sound.SoundManager;
 import java.awt.AlphaComposite;
@@ -25,6 +25,7 @@ import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -57,6 +58,11 @@ public class CollectionLogOverlay extends Overlay
 	// smaller than the icon slot's ~71px usable interior, so scale the longer side up to this
 	// before centering it.
 	private static final int ICON_TARGET_SIZE = 66;
+	// +3 nudges just the sprite right of the icon frame's true center - the sprite art itself isn't
+	// visually centered within its own bounding box, so centering it within the (correctly centered)
+	// icon frame left it looking off-center on the panel. The icon frame/background stay at true
+	// center; only the sprite draw position below is shifted.
+	private static final int ICON_SPRITE_X_OFFSET = 3;
 
 	// Top-left / top-right stacked label+value blocks. Both stay clear of the icon's horizontal
 	// footprint (ICON_X to ICON_X+ICON_CANVAS_SIZE) even though the icon dips down into this same
@@ -65,6 +71,16 @@ public class CollectionLogOverlay extends Overlay
 	private static final int CORNER_PADDING_X = 16;
 	private static final int CORNER_LABEL_BASELINE_Y = 22;
 	private static final int CORNER_VALUE_BASELINE_Y = 45;
+	// Ambiguous Drop rate values (see PanelStat#DROP_RATE) can show up to 2 stacked value lines
+	// instead of the usual 1, in a smaller font so both still fit above the item name. Starts higher
+	// than CORNER_VALUE_BASELINE_Y - stacking both lines below that baseline would run the second
+	// line's descenders into the divider baked into the background art at y=57-58.
+	private static final int CORNER_MULTI_VALUE_FIRST_BASELINE_Y = 34;
+	private static final int CORNER_MULTI_VALUE_LINE_HEIGHT = 16;
+	private static final float CORNER_MULTI_VALUE_FONT_SIZE = 14f;
+	// Both corners' text is clear of the icon's horizontal footprint (see ICON_X/ICON_CANVAS_SIZE)
+	// - used to wrap/truncate corner stat text so it never runs into the icon.
+	private static final int CORNER_TEXT_MAX_WIDTH = ICON_X - CORNER_PADDING_X;
 
 	// Item name - centered, below the baked-in divider.
 	private static final int NAME_BASELINE_Y = 90;
@@ -110,6 +126,7 @@ public class CollectionLogOverlay extends Overlay
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
 	private final Font cornerLabelFont;
 	private final Font cornerValueFont;
+	private final Font cornerMultiValueFont;
 	private final Font nameFont;
 	private final Font captionFont;
 
@@ -150,6 +167,7 @@ public class CollectionLogOverlay extends Overlay
 
 		cornerLabelFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_LABEL_FONT_SIZE);
 		cornerValueFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_VALUE_FONT_SIZE);
+		cornerMultiValueFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_MULTI_VALUE_FONT_SIZE);
 		nameFont = FontManager.getRunescapeBoldFont().deriveFont(NAME_FONT_SIZE);
 		captionFont = FontManager.getRunescapeBoldFont().deriveFont(CAPTION_FONT_SIZE);
 	}
@@ -166,8 +184,8 @@ public class CollectionLogOverlay extends Overlay
 		}
 	}
 
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, Double compPercent,
-		Integer killCount, Double dropProbability)
+	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
+		Double compPercent, Integer killCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
 		// The overlay was fully idle (nothing showing, nothing queued) right before this item arrived,
 		// so it's the first of a fresh batch - the only one that plays a sound when bulkUnlockSfx is on.
@@ -175,8 +193,8 @@ public class CollectionLogOverlay extends Overlay
 		// queue) is treated as part of that same batch, however far apart in time the underlying chat
 		// messages actually were.
 		boolean batchStart = queue.isEmpty() && current == null;
-		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, compPercent, killCount,
-			dropProbability, batchStart));
+		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
+			dropProbability, ambiguousDropRates, batchStart));
 	}
 
 	public void clear()
@@ -294,7 +312,7 @@ public class CollectionLogOverlay extends Overlay
 		Object originalInterpolation = graphics.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
 		graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 		graphics.drawImage(sprite,
-			ICON_X + (ICON_CANVAS_SIZE - scaledWidth) / 2,
+			ICON_X + ICON_SPRITE_X_OFFSET + (ICON_CANVAS_SIZE - scaledWidth) / 2,
 			ICON_Y + (ICON_CANVAS_SIZE - scaledHeight) / 2,
 			scaledWidth, scaledHeight,
 			null);
@@ -312,18 +330,16 @@ public class CollectionLogOverlay extends Overlay
 		Stat leftStat = resolveStatWithFallback(config.leftPanelStat().toPanelStat(), current);
 		if (leftStat != null)
 		{
-			drawCornerStat(graphics, leftStat, CORNER_PADDING_X, CORNER_PADDING_X, cornerLabelMetrics, cornerValueMetrics);
+			drawCornerStat(graphics, leftStat, CORNER_PADDING_X, false, cornerLabelMetrics, cornerValueMetrics);
 		}
 
 		Stat rightStat = resolveStatWithFallback(config.rightPanelStat().toPanelStat(), current);
 		if (rightStat != null)
 		{
-			// Right corner: label and value are each independently right-aligned to the panel edge,
-			// not sharing one x - the label ("Value") is usually much shorter than the value
+			// Right corner: label and each value line are independently right-aligned to the panel
+			// edge, not sharing one x - the label ("Value") is usually much shorter than the value
 			// ("1,121,123 gp") and would look left-stranded if both used the same starting x.
-			int labelX = PANEL_WIDTH - CORNER_PADDING_X - cornerLabelMetrics.stringWidth(rightStat.getLabel());
-			int valueX = PANEL_WIDTH - CORNER_PADDING_X - cornerValueMetrics.stringWidth(rightStat.getValue());
-			drawCornerStat(graphics, rightStat, labelX, valueX, cornerLabelMetrics, cornerValueMetrics);
+			drawCornerStat(graphics, rightStat, PANEL_WIDTH - CORNER_PADDING_X, true, cornerLabelMetrics, cornerValueMetrics);
 		}
 
 		int maxNameWidth = PANEL_WIDTH - 2 * NAME_SIDE_MARGIN;
@@ -344,15 +360,35 @@ public class CollectionLogOverlay extends Overlay
 		graphics.drawString(CAPTION_TEXT, captionX, CAPTION_BASELINE_Y);
 	}
 
-	private static void drawCornerStat(Graphics2D graphics, Stat stat, int labelX, int valueX, FontMetrics labelMetrics, FontMetrics valueMetrics)
+	/**
+	 * @param edgeX the x coordinate {@code stat}'s label and each value line are anchored to - their
+	 *              left edge if {@code rightAligned} is false, their right edge otherwise
+	 */
+	private void drawCornerStat(Graphics2D graphics, Stat stat, int edgeX, boolean rightAligned, FontMetrics labelMetrics, FontMetrics valueMetrics)
 	{
 		graphics.setFont(labelMetrics.getFont());
 		graphics.setColor(PRICE_LABEL_COLOR);
-		graphics.drawString(stat.getLabel(), labelX, CORNER_LABEL_BASELINE_Y);
+		graphics.drawString(stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, CORNER_LABEL_BASELINE_Y);
 
-		graphics.setFont(valueMetrics.getFont());
+		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
+		// a smaller font and tighter line spacing than the usual single-line case, so both still fit
+		// above the item name.
+		boolean multiLine = stat.getValueLines().size() > 1;
+		Font valueFont = multiLine ? cornerMultiValueFont : valueMetrics.getFont();
+		FontMetrics activeValueMetrics = multiLine ? graphics.getFontMetrics(valueFont) : valueMetrics;
+		int lineHeight = multiLine ? CORNER_MULTI_VALUE_LINE_HEIGHT : 0;
+
+		graphics.setFont(valueFont);
 		graphics.setColor(stat.getValueColor());
-		graphics.drawString(stat.getValue(), valueX, CORNER_VALUE_BASELINE_Y);
+		int valueY = multiLine ? CORNER_MULTI_VALUE_FIRST_BASELINE_Y : CORNER_VALUE_BASELINE_Y;
+		for (String rawLine : stat.getValueLines())
+		{
+			// Only the multi-line case bothers truncating - the usual single-line stats already fit
+			// comfortably, but a fraction's denominator has no natural length cap.
+			String line = multiLine ? truncate(graphics, rawLine, valueFont, CORNER_TEXT_MAX_WIDTH) : rawLine;
+			graphics.drawString(line, rightAligned ? edgeX - activeValueMetrics.stringWidth(line) : edgeX, valueY);
+			valueY += lineHeight;
+		}
 	}
 
 	private void advance(long now)
@@ -481,19 +517,30 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * @return the primary stat, or its fallback if the primary isn't applicable to {@code item}
-	 *         (e.g. Luck picked but there's no correlated kill) - or null if neither is, in which
-	 *         case that side of the panel is simply left blank.
+	 * @return the primary stat, or the first stat down its fallback chain that's applicable to
+	 *         {@code item} (e.g. Kill count picked but there's no correlated kill, so Completion is
+	 *         tried) - or null if none of them are, in which case that side of the panel is simply
+	 *         left blank.
 	 */
 	private Stat resolveStatWithFallback(PanelStat primary, PendingItem item)
 	{
-		Stat stat = resolveStat(primary, item);
-		return stat != null ? stat : resolveStat(fallbackFor(primary), item);
+		PanelStat candidate = primary;
+		while (candidate != PanelStat.NONE)
+		{
+			Stat stat = resolveStat(candidate, item);
+			if (stat != null)
+			{
+				return stat;
+			}
+			candidate = fallbackFor(candidate);
+		}
+		return null;
 	}
 
 	/**
-	 * Kill count and Luck are the only stats that can be unavailable for an item (no correlated
-	 * kill); each falls back to a stat that's always available. Everything else has no fallback.
+	 * Kill count and Drop rate are the stats that can be unavailable for an item (no correlated
+	 * kill, or no known/unambiguous drop rate); each falls back to a stat that's always available.
+	 * Everything else has no fallback.
 	 */
 	private static PanelStat fallbackFor(PanelStat stat)
 	{
@@ -501,7 +548,7 @@ public class CollectionLogOverlay extends Overlay
 		{
 			case KILL_COUNT:
 				return PanelStat.RARITY;
-			case LUCK:
+			case DROP_RATE:
 				return PanelStat.VALUE;
 			default:
 				return PanelStat.NONE;
@@ -517,34 +564,51 @@ public class CollectionLogOverlay extends Overlay
 		switch (stat)
 		{
 			case VALUE:
-				String valueText = QuantityFormatter.formatNumber(item.getPrice()) + " gp" + (item.isHighAlch() ? " (HA)" : "");
-				return new Stat("Value: ", valueText, PRICE_VALUE_COLOR);
+				boolean showAlch = config.valueDisplayMode() == ValueDisplayMode.HIGH_ALCH;
+				int displayPrice = showAlch ? item.getAlchPrice() : item.getPrice();
+				boolean displayHighAlch = showAlch || item.isHighAlch();
+				String valueText = QuantityFormatter.formatNumber(displayPrice) + " gp" + (displayHighAlch ? " (HA)" : "");
+				return new Stat("Value: ", List.of(valueText), PRICE_VALUE_COLOR);
 			case RARITY:
 				if (item.getCompPercent() == null)
 				{
 					return null;
 				}
-				return new Stat("Wiki Comp%: ", String.format("%.1f%%", item.getCompPercent()), tierColor(item.getTier()));
+				return new Stat("Wiki Comp%: ", List.of(String.format("%.1f%%", item.getCompPercent())), tierColor(item.getTier()));
 			case KILL_COUNT:
 				if (item.getKillCount() == null)
 				{
 					return null;
 				}
 				String killCountText = QuantityFormatter.formatNumber(item.getKillCount());
-				return new Stat("KC: ", killCountText, PRICE_VALUE_COLOR);
-			case LUCK:
-				if (item.getKillCount() == null || item.getDropProbability() == null)
+				return new Stat("KC: ", List.of(killCountText), PRICE_VALUE_COLOR);
+			case DROP_RATE:
+				if (item.getDropProbability() != null)
+				{
+					return new Stat("Drop rate: ", List.of(formatFraction(item.getDropProbability())), PRICE_VALUE_COLOR);
+				}
+				// No single known rate - if it's a notable drop from exactly 2 tracked sources, show
+				// both rather than hiding the stat entirely (see DropRateResolver#dropRatesByItemName).
+				// More than that doesn't comfortably fit, so it falls through to Value like an unknown
+				// item would.
+				List<DropRateResolver.SourceRate> ambiguous = item.getAmbiguousDropRates();
+				if (ambiguous.size() != 2)
 				{
 					return null;
 				}
-				LuckTier tier = LuckTier.fromKillCount(item.getKillCount(), item.getDropProbability());
-				String fraction = "1/" + Math.round(1 / item.getDropProbability());
-				String luckText = tier + " (" + item.getKillCount() + "kc, " + fraction + ")";
-				return new Stat("Luck: ", luckText, PRICE_VALUE_COLOR);
+				List<String> ambiguousLines = ambiguous.stream()
+					.map(rate -> formatFraction(rate.getProbability()))
+					.collect(Collectors.toList());
+				return new Stat("Drop rate: ", ambiguousLines, PRICE_VALUE_COLOR);
 			case NONE:
 			default:
 				return null;
 		}
+	}
+
+	private static String formatFraction(double dropProbability)
+	{
+		return "1/" + Math.round(1 / dropProbability);
 	}
 
 	private static Color tierColor(RarityTier tier)
@@ -574,9 +638,11 @@ public class CollectionLogOverlay extends Overlay
 		RarityTier tier;
 		int price;
 		boolean highAlch;
+		int alchPrice;
 		Double compPercent;
 		Integer killCount;
 		Double dropProbability;
+		List<DropRateResolver.SourceRate> ambiguousDropRates;
 		boolean batchStart;
 	}
 
@@ -591,7 +657,7 @@ public class CollectionLogOverlay extends Overlay
 	private static class Stat
 	{
 		String label;
-		String value;
+		List<String> valueLines;
 		Color valueColor;
 	}
 }

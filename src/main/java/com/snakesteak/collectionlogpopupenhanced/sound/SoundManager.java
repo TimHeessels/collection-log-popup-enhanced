@@ -2,13 +2,10 @@ package com.snakesteak.collectionlogpopupenhanced.sound;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityTier;
-import java.io.IOException;
 import java.util.EnumMap;
 import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.sound.sampled.LineUnavailableException;
-import javax.sound.sampled.UnsupportedAudioFileException;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.audio.AudioPlayer;
 
@@ -60,7 +57,7 @@ public class SoundManager
 		{
 			audioPlayer.play(SoundManager.class, resource, gain(config.soundVolume()));
 		}
-		catch (IOException | UnsupportedAudioFileException | LineUnavailableException e)
+		catch (Exception e)
 		{
 			log.warn("Failed to play {} sound", tier, e);
 		}

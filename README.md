@@ -8,6 +8,16 @@ In settings menu,
 2: disable 'Collection log - New addition popup' (so you don't get duplicate popups)
 ![alt text](collectionLogSettings.png)
 
+# Testing
+If you'd like to test the visuals of the plugin you can do so with:
+::clogtest X
+E.G '::clogtest 5' would show 5 random unlocks in a row
+OR
+::clogtest NAME
+E.G '::clogtest basilisk' jaw would show that specific item.
+
+Note: This doesn't actually unlock the clog ;) It's just for testing.
+
 # Popup
 The popup will apear on gaining a new collection log slot, and show the icon for the item.
 It also shows a different frame and sound effect based the completion rate of the item and the value (can be configured in settings to be either of the two or a combination)

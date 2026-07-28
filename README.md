@@ -11,11 +11,11 @@ In settings menu,
 
 # Testing
 If you'd like to test the visuals of the plugin you can do so with:
-* ::clogtest X
-E.G '::clogtest 5' would show 5 random unlocks in a row
-OR
-* ::clogtest NAME
-E.G '::clogtest basilisk' jaw would show that specific item.
+<p> ::clogtest X </p>
+<p> E.G '::clogtest 5' would show 5 random unlocks in a row </p>
+<p> OR </p>
+<p> ::clogtest NAME </p>
+<p> E.G '::clogtest basilisk' jaw would show that specific item. </p>
 
 Note: This doesn't actually unlock the clog ;) It's just for testing.
 

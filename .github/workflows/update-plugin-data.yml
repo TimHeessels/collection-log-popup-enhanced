@@ -1,0 +1,65 @@
+name: Update plugin data
+
+# Regenerates the wiki-sourced datasets bundled with the plugin - drop-rates.json (see
+# scripts/generate-drop-rates.py) and rarity-overrides.json (see
+# scripts/generate-rarity-overrides.py) - and publishes both to the orphan "data" branch, which the
+# plugin's RemoteDropRateUpdater and RemoteRarityOverridesUpdater fetch at runtime. This keeps both
+# datasets fresh between plugin releases without needing a new Hub version - see
+# src/main/java/com/snakesteak/collectionlogpopupenhanced/droprate/RemoteDropRateUpdater.java and
+# src/main/java/com/snakesteak/collectionlogpopupenhanced/rarity/RemoteRarityOverridesUpdater.java.
+#
+# Scheduled a day after the usual Wednesday OSRS update so the wiki has had time to update its data
+# first.
+on:
+  schedule:
+    - cron: '0 6 * * 4'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-plugin-data:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate drop-rates.json
+        run: python scripts/generate-drop-rates.py
+
+      - name: Generate rarity-overrides.json
+        run: python scripts/generate-rarity-overrides.py
+
+      - name: Publish to data branch
+        env:
+          DROP_RATES_FILE: src/main/resources/com/snakesteak/collectionlogpopupenhanced/drop-rates.json
+          RARITY_OVERRIDES_FILE: src/main/resources/com/snakesteak/collectionlogpopupenhanced/rarity-overrides.json
+        run: |
+          set -e
+          cp "$DROP_RATES_FILE" /tmp/drop-rates.json
+          cp "$RARITY_OVERRIDES_FILE" /tmp/rarity-overrides.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git fetch origin data; then
+            git checkout -B data origin/data
+          else
+            git checkout --orphan data
+            git rm -rf . > /dev/null
+          fi
+
+          cp /tmp/drop-rates.json ./drop-rates.json
+          cp /tmp/rarity-overrides.json ./rarity-overrides.json
+          git add drop-rates.json rarity-overrides.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to plugin data - skipping commit."
+          else
+            git commit -m "Update plugin data"
+            git push origin data
+          fi

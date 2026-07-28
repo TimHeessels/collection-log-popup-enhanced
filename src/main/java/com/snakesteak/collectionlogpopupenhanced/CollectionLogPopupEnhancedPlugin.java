@@ -8,22 +8,16 @@ import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
+import com.snakesteak.collectionlogpopupenhanced.rarity.RemoteRarityOverridesUpdater;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.Client;
 import net.runelite.api.ChatMessageType;
-import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.CommandExecuted;
-import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.events.GameTick;
-import net.runelite.api.events.VarbitChanged;
-import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -41,21 +35,10 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 {
 	private static final Pattern NEW_COLLECTION_LOG_ITEM = Pattern.compile("New item added to your collection log: (.*)");
 
-	// Settings that suppress the chat message this plugin relies on (off, and popup-only).
-	private static final Set<Integer> COLLECTION_LOG_SETTING_VALUES_WITHOUT_CHAT_MESSAGE = Set.of(0, 2);
-
-	private static final int SETTING_WARNING_THROTTLE_TICKS = 16;
-
-	private static final String SETTING_WARNING_MESSAGE = "Collection Log Popup Enhanced: enable the \"Chat message\" "
-		+ "option for Collection log - New addition notification (Settings > All Settings) so new unlocks can be detected.";
-
 	// Dev-only: "::clogtest [count]" shows random items from the rarity dataset; "::clogtest <item
 	// name> [kc]" runs a specific name through the real detection pipeline, optionally forcing a kill
 	// count. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
-
-	@Inject
-	private Client client;
 
 	@Inject
 	private ItemManager itemManager;
@@ -76,6 +59,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private RemoteDropRateUpdater remoteDropRateUpdater;
 
 	@Inject
+	private RemoteRarityOverridesUpdater remoteRarityOverridesUpdater;
+
+	@Inject
 	private EventBus eventBus;
 
 	@Inject
@@ -84,9 +70,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Inject
 	private CollectionLogOverlay collectionLogOverlay;
 
-	private int lastSettingWarningTick = -1;
-	private boolean pendingLoginSettingCheck = false;
-
 	@Override
 	protected void startUp() throws Exception
 	{
@@ -94,6 +77,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		eventBus.register(killCountTracker);
 		overlayManager.add(collectionLogOverlay);
 		remoteDropRateUpdater.startUp();
+		remoteRarityOverridesUpdater.startUp();
 		log.debug("Collection Log Popup Enhanced started!");
 	}
 
@@ -105,6 +89,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
 		remoteDropRateUpdater.shutDown();
+		remoteRarityOverridesUpdater.shutDown();
 		log.debug("Collection Log Popup Enhanced stopped!");
 	}
 
@@ -252,59 +237,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
 			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates);
-	}
-
-	@Subscribe
-	public void onVarbitChanged(VarbitChanged varbitChanged)
-	{
-		if (varbitChanged.getVarbitId() != VarbitID.OPTION_COLLECTION_NEW_ITEM)
-		{
-			return;
-		}
-
-		warnIfSettingBreaksDetection(varbitChanged.getValue());
-	}
-
-	@Subscribe
-	public void onGameStateChanged(GameStateChanged gameStateChanged)
-	{
-		if (gameStateChanged.getGameState() != GameState.LOGGED_IN)
-		{
-			return;
-		}
-
-		// Account settings (like this varbit) aren't necessarily synced from the server yet at the
-		// moment this event fires, so defer the read to the next tick rather than risk reading a
-		// stale default value here.
-		pendingLoginSettingCheck = true;
-	}
-
-	@Subscribe
-	public void onGameTick(GameTick gameTick)
-	{
-		if (!pendingLoginSettingCheck)
-		{
-			return;
-		}
-		pendingLoginSettingCheck = false;
-
-		warnIfSettingBreaksDetection(client.getVarbitValue(VarbitID.OPTION_COLLECTION_NEW_ITEM));
-	}
-
-	private void warnIfSettingBreaksDetection(int settingValue)
-	{
-		if (!COLLECTION_LOG_SETTING_VALUES_WITHOUT_CHAT_MESSAGE.contains(settingValue))
-		{
-			return;
-		}
-
-		if (lastSettingWarningTick != -1 && client.getTickCount() - lastSettingWarningTick <= SETTING_WARNING_THROTTLE_TICKS)
-		{
-			return;
-		}
-		lastSettingWarningTick = client.getTickCount();
-
-		client.addChatMessage(ChatMessageType.CONSOLE, "", SETTING_WARNING_MESSAGE, null);
 	}
 
 	@Provides

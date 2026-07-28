@@ -5,6 +5,7 @@ import com.google.gson.Gson;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -31,6 +32,10 @@ public class RarityResolver
 {
 	private static final String COMPLETION_RESOURCE = "/com/snakesteak/collectionlogpopupenhanced/rarity-overrides.json";
 
+	static final Type DATASET_TYPE = new TypeToken<Map<String, Double>>()
+	{
+	}.getType();
+
 	private static final double COMPLETION_WEIGHT = 0.6;
 	private static final double VALUE_WEIGHT = 0.4;
 
@@ -42,16 +47,24 @@ public class RarityResolver
 
 	private final ItemManager itemManager;
 	private final CollectionLogPopupEnhancedConfig config;
-	private final Map<Integer, Double> compPercentById;
-	private final List<Integer> itemIds;
+	private volatile CompletionData completionData;
 
 	@Inject
 	public RarityResolver(ItemManager itemManager, CollectionLogPopupEnhancedConfig config, Gson gson)
 	{
 		this.itemManager = itemManager;
 		this.config = config;
-		this.compPercentById = loadCompPercentById(gson);
-		this.itemIds = List.copyOf(compPercentById.keySet());
+		this.completionData = new CompletionData(loadBundled(gson));
+	}
+
+	/**
+	 * Replaces the completion dataset with a freshly fetched or cached copy - called by
+	 * {@code RemoteRarityOverridesUpdater} once it has a parsed, non-empty replacement. Safe to call
+	 * from any thread; readers always see either the old or new dataset, never a partial one.
+	 */
+	void reload(Map<String, Double> raw)
+	{
+		this.completionData = new CompletionData(raw);
 	}
 
 	/**
@@ -62,33 +75,27 @@ public class RarityResolver
 	 */
 	public List<Integer> randomItemIds(int count)
 	{
-		if (itemIds.isEmpty() || count <= 0)
+		CompletionData data = completionData;
+		if (data.ids.isEmpty() || count <= 0)
 		{
 			return List.of();
 		}
-		List<Integer> shuffled = new ArrayList<>(itemIds);
+		List<Integer> shuffled = new ArrayList<>(data.ids);
 		Collections.shuffle(shuffled, ThreadLocalRandom.current());
 		return shuffled.subList(0, Math.min(count, shuffled.size()));
 	}
 
-	private static Map<Integer, Double> loadCompPercentById(Gson gson)
+	private static Map<String, Double> loadBundled(Gson gson)
 	{
-		Map<Integer, Double> result = new TreeMap<>();
 		try (Reader reader = openResource(COMPLETION_RESOURCE))
 		{
-			Map<String, Double> raw = gson.fromJson(reader, new TypeToken<Map<String, Double>>()
-			{
-			}.getType());
-			if (raw != null)
-			{
-				raw.forEach((id, percent) -> result.put(Integer.parseInt(id), percent));
-			}
+			return gson.fromJson(reader, DATASET_TYPE);
 		}
 		catch (Exception e)
 		{
 			log.warn("Failed to load collection log completion data", e);
+			return Map.of();
 		}
-		return Collections.unmodifiableMap(result);
 	}
 
 	private static Reader openResource(String path)
@@ -103,22 +110,23 @@ public class RarityResolver
 	 */
 	public RarityResult resolve(int itemId, String itemName)
 	{
+		CompletionData data = completionData;
 		int price = getPrice(itemId);
 		boolean highAlch = isHighAlchPrice(itemId);
 		int alchPrice = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
 
 		if (PetItems.names().contains(itemName))
 		{
-			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercentById.get(itemId), null, 0, 100, 0, 0, 0, alchPrice);
+			return new RarityResult(RarityTier.PET, itemId, price, highAlch, data.byId.get(itemId), null, 0, 100, 0, 0, 0, alchPrice);
 		}
 
-		if (compPercentById.isEmpty())
+		if (data.byId.isEmpty())
 		{
 			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, 0, 0, 0, 0, 0, alchPrice);
 		}
 
-		Dataset dataset = buildDataset();
-		Double compPercent = itemId >= 0 ? compPercentById.get(itemId) : null;
+		Dataset dataset = buildDataset(data);
+		Double compPercent = itemId >= 0 ? data.byId.get(itemId) : null;
 		RarityBasis basis = config.rarityBasis();
 
 		double score;
@@ -263,9 +271,9 @@ public class RarityResolver
 	 * unlocks are rare, and recomputing avoids serving stale percentile cutoffs from a price
 	 * snapshot taken before ItemManager finished its own background price refresh.
 	 */
-	private Dataset buildDataset()
+	private Dataset buildDataset(CompletionData data)
 	{
-		int n = compPercentById.size();
+		int n = data.byId.size();
 		double[] logPrices = new double[n];
 		double[] compPercents = new double[n];
 		boolean[] hasPositivePrice = new boolean[n];
@@ -273,7 +281,7 @@ public class RarityResolver
 		double logPriceMax = Double.NEGATIVE_INFINITY;
 
 		int i = 0;
-		for (Map.Entry<Integer, Double> entry : compPercentById.entrySet())
+		for (Map.Entry<Integer, Double> entry : data.byId.entrySet())
 		{
 			int price = getPrice(entry.getKey());
 			double logPrice = logPrice(price);
@@ -313,6 +321,28 @@ public class RarityResolver
 		Arrays.sort(positivePricedValueScores);
 
 		return new Dataset(compositeScores, completionScores, positivePricedValueScores, logPriceMin, logPriceMax);
+	}
+
+	/**
+	 * Bundles the parsed completion-percent-by-item-id map with the item id list derived from it, so
+	 * {@link #reload(Map)} can swap both atomically via a single volatile write - readers never see
+	 * one already updated while the other is still the old dataset.
+	 */
+	private static final class CompletionData
+	{
+		private final Map<Integer, Double> byId;
+		private final List<Integer> ids;
+
+		private CompletionData(Map<String, Double> raw)
+		{
+			Map<Integer, Double> parsed = new TreeMap<>();
+			if (raw != null)
+			{
+				raw.forEach((id, percent) -> parsed.put(Integer.parseInt(id), percent));
+			}
+			this.byId = Collections.unmodifiableMap(parsed);
+			this.ids = List.copyOf(parsed.keySet());
+		}
 	}
 
 	private static final class Dataset

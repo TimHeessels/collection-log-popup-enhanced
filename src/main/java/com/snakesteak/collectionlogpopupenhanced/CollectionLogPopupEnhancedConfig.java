@@ -37,7 +37,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "rarityBasis",
 		name = "Rarity based on",
-		description = "Which signal(s) determine an item's rarity tier: its GE/high alch value, how many players have obtained it, or both combined",
+		description = "Rarity determined by cost, wiki comp%, or a calculcation of both",
 		section = raritySection
 	)
 	default RarityBasis rarityBasis()
@@ -48,7 +48,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "overlayDisplaySeconds",
 		name = "Overlay display duration (seconds)",
-		description = "How long each new collection log item stays on screen before advancing to the next queued item",
+		description = "How long each new collection log item stays on screen",
 		section = overlaySection
 	)
 	default int overlayDisplaySeconds()
@@ -58,11 +58,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "leftPanelStat",
-		name = "Bottom-left stat",
-		description = "Preferred stat for the bottom-left of the overlay. Kill count falls back to Completion "
-			+ "when there's no correlated kill for the item; every other stat is always available. For monsters "
-			+ "with no official kill count, a trailing '*' marks a kill count tracked by this plugin (since it "
-			+ "started watching that monster) rather than your true lifetime total",
+		name = "Left statistic",
+		description = "Which statistic to show on the left side of the panel",
 		section = overlaySection
 	)
 	default LeftPanelStat leftPanelStat()
@@ -73,8 +70,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "valueDisplayMode",
 		name = "Value shown as",
-		description = "Which price the Value stat shows. GE value still falls back to High alch when an item "
-			+ "has no GE price (untradeable, or tradeable but unlisted)",
+		description = "Prefer to display value statistic as high alch or G.E.",
 		section = overlaySection
 	)
 	default ValueDisplayMode valueDisplayMode()
@@ -84,9 +80,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "rightPanelStat",
-		name = "Bottom-right stat",
-		description = "Preferred stat for the bottom-right of the overlay. Drop rate falls back to Value when "
-			+ "there's no known drop rate for the item, or it's ambiguous across more than 2 sources",
+		name = "Right statistic",
+		description = "Which statistic to show on the right side of the panel",
 		section = overlaySection
 	)
 	default RightPanelStat rightPanelStat()
@@ -97,7 +92,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "bulkUnlockSfx",
 		name = "Bulk unlock SFX",
-		description = "When multiple items unlock at once, play a single sound for the first item instead of one for each",
+		description = "When multiple items unlock at once, play a single sound instead",
 		section = audioSection
 	)
 	default boolean bulkUnlockSfx()
@@ -108,7 +103,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledCommon",
 		name = "Play audio effect for common items",
-		description = "Play a sound effect when a new Common-tier collection log item is detected",
+		description = "Play a sound effect when a new Common-tier collection log item is unlocked",
 		section = audioSection
 	)
 	default boolean soundEnabledCommon()
@@ -119,7 +114,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledUncommon",
 		name = "Play audio effect for uncommon items",
-		description = "Play a sound effect when a new Uncommon-tier collection log item is detected",
+		description = "Play a sound effect when a new Uncommon-tier collection log item is unlocked",
 		section = audioSection
 	)
 	default boolean soundEnabledUncommon()
@@ -130,7 +125,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledRare",
 		name = "Play audio effect for rare items",
-		description = "Play a sound effect when a new Rare-tier collection log item is detected",
+		description = "Play a sound effect when a new Rare-tier collection log item is unlocked",
 		section = audioSection
 	)
 	default boolean soundEnabledRare()
@@ -141,7 +136,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledVeryRare",
 		name = "Play audio effect for very rare items",
-		description = "Play a sound effect when a new Very rare-tier collection log item is detected",
+		description = "Play a sound effect when a new Very rare-tier collection log item is unlocked",
 		section = audioSection
 	)
 	default boolean soundEnabledVeryRare()
@@ -152,7 +147,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledPet",
 		name = "Play audio effect for pets",
-		description = "Play a sound effect when a new pet is detected",
+		description = "Play a sound effect when a new pet is unlocked",
 		section = audioSection
 	)
 	default boolean soundEnabledPet()

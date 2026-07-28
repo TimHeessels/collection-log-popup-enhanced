@@ -1,4 +1,4 @@
-package com.snakesteak.collectionlogpopupenhanced.droprate;
+package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.gson.Gson;
 import com.snakesteak.collectionlogpopupenhanced.remote.RemoteJsonDatasetSync;
@@ -14,16 +14,17 @@ import net.runelite.client.RuneLite;
 import okhttp3.OkHttpClient;
 
 /**
- * Keeps {@link DropRateResolver}'s dataset fresher than the plugin's own release cadence by
- * periodically re-downloading drop-rates.json from this repo's "data" branch, which a scheduled
- * GitHub Actions workflow (.github/workflows/update-plugin-data.yml) regenerates from the wiki
- * roughly weekly. See {@link RemoteJsonDatasetSync} for the shared fetch/cache/fallback mechanics.
+ * Keeps {@link RarityResolver}'s collection log completion percentages fresher than the plugin's
+ * own release cadence by periodically re-downloading rarity-overrides.json from this repo's "data"
+ * branch, which a scheduled GitHub Actions workflow (.github/workflows/update-plugin-data.yml)
+ * regenerates from the wiki's own Module:Collection_log/completion.json roughly weekly. See
+ * {@link RemoteJsonDatasetSync} for the shared fetch/cache/fallback mechanics.
  */
 @Singleton
-public class RemoteDropRateUpdater
+public class RemoteRarityOverridesUpdater
 {
 	private static final String DATA_URL =
-		"https://raw.githubusercontent.com/TimHeessels/collection-log-popup-enhanced/data/drop-rates.json";
+		"https://raw.githubusercontent.com/TimHeessels/collection-log-popup-enhanced/data/rarity-overrides.json";
 
 	// Data is only regenerated weekly - re-fetching more often than this would just hit the CDN for
 	// an unchanged file.
@@ -31,17 +32,17 @@ public class RemoteDropRateUpdater
 	private static final long CHECK_INTERVAL_MINUTES = Duration.ofHours(6).toMinutes();
 
 	private final ScheduledExecutorService executor;
-	private final RemoteJsonDatasetSync<Map<String, Map<String, Double>>> sync;
+	private final RemoteJsonDatasetSync<Map<String, Double>> sync;
 
 	private ScheduledFuture<?> checkTask;
 
 	@Inject
-	public RemoteDropRateUpdater(DropRateResolver dropRateResolver, Gson gson, OkHttpClient okHttpClient,
+	public RemoteRarityOverridesUpdater(RarityResolver rarityResolver, Gson gson, OkHttpClient okHttpClient,
 		ScheduledExecutorService executor)
 	{
 		this.executor = executor;
-		this.sync = new RemoteJsonDatasetSync<>(DATA_URL, cacheFilePath(), DropRateResolver.DATASET_TYPE,
-			REFRESH_INTERVAL, gson, okHttpClient, raw -> !raw.isEmpty(), dropRateResolver::reload);
+		this.sync = new RemoteJsonDatasetSync<>(DATA_URL, cacheFilePath(), RarityResolver.DATASET_TYPE,
+			REFRESH_INTERVAL, gson, okHttpClient, raw -> !raw.isEmpty(), rarityResolver::reload);
 	}
 
 	public void startUp()
@@ -62,6 +63,6 @@ public class RemoteDropRateUpdater
 	{
 		return RuneLite.RUNELITE_DIR.toPath()
 			.resolve("collection-log-popup-enhanced")
-			.resolve("drop-rates.json");
+			.resolve("rarity-overrides.json");
 	}
 }

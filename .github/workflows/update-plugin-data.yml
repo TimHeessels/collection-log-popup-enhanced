@@ -46,6 +46,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+          # The generator scripts just overwrote these tracked files in place. Now that the
+          # regenerated content is safely copied out to /tmp, discard that in-place edit -
+          # otherwise switching to "data" (a branch whose tree doesn't have these paths at all)
+          # fails, since git won't silently drop an uncommitted local change.
+          git checkout -- .
+
           if git fetch origin data; then
             git checkout -B data origin/data
           else

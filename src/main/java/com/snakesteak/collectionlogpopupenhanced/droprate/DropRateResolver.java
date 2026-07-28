@@ -4,6 +4,7 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,7 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Resolves how likely a collection log item was to drop from a given source, per kill, from a
- * bundled dataset generated offline by scripts/generate-drop-rates.py.
+ * dataset generated offline by scripts/generate-drop-rates.py - initially the copy bundled with the
+ * plugin, optionally kept fresh at runtime by {@link RemoteDropRateUpdater} (see its javadoc).
  */
 @Slf4j
 @Singleton
@@ -23,12 +25,26 @@ public class DropRateResolver
 {
 	private static final String DROP_RATES_RESOURCE = "/com/snakesteak/collectionlogpopupenhanced/drop-rates.json";
 
-	private final Map<String, Map<String, Double>> dropRatesBySource;
+	static final Type DATASET_TYPE = new TypeToken<Map<String, Map<String, Double>>>()
+	{
+	}.getType();
+
+	private volatile Map<String, Map<String, Double>> dropRatesBySource;
 
 	@Inject
 	public DropRateResolver(Gson gson)
 	{
-		this.dropRatesBySource = load(gson);
+		this.dropRatesBySource = normalize(loadBundled(gson));
+	}
+
+	/**
+	 * Replaces the dataset with a freshly fetched or cached copy - called by
+	 * {@link RemoteDropRateUpdater} once it has a parsed, non-empty replacement. Safe to call from
+	 * any thread; readers always see either the old or new dataset, never a partial one.
+	 */
+	void reload(Map<String, Map<String, Double>> raw)
+	{
+		dropRatesBySource = normalize(raw);
 	}
 
 	/**
@@ -83,34 +99,37 @@ public class DropRateResolver
 		return matches;
 	}
 
-	private static Map<String, Map<String, Double>> load(Gson gson)
+	private static Map<String, Map<String, Double>> loadBundled(Gson gson)
 	{
-		Map<String, Map<String, Double>> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 		try (Reader reader = openResource())
 		{
-			Map<String, Map<String, Double>> raw = gson.fromJson(reader, new TypeToken<Map<String, Map<String, Double>>>()
-			{
-			}.getType());
-			if (raw != null)
-			{
-				raw.forEach((source, items) ->
-				{
-					Map<String, Double> itemRates = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-					itemRates.putAll(items);
-					result.put(source, itemRates);
-				});
-			}
+			return gson.fromJson(reader, DATASET_TYPE);
 		}
 		catch (Exception e)
 		{
 			log.warn("Failed to load drop rate data", e);
+			return Map.of();
 		}
-		return result;
 	}
 
 	private static Reader openResource()
 	{
 		return new InputStreamReader(DropRateResolver.class.getResourceAsStream(DROP_RATES_RESOURCE));
+	}
+
+	private static Map<String, Map<String, Double>> normalize(Map<String, Map<String, Double>> raw)
+	{
+		Map<String, Map<String, Double>> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+		if (raw != null)
+		{
+			raw.forEach((source, items) ->
+			{
+				Map<String, Double> itemRates = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+				itemRates.putAll(items);
+				result.put(source, itemRates);
+			});
+		}
+		return result;
 	}
 
 	@Value

@@ -1,19 +1,20 @@
 # Collection Log Popup Enhanced
-Displays a popup and sound effect based on rarity on new collection logs
+Displays a popup and (optional) sound effect based on rarity on new collection logs.
+
 ![alt text](image.png)
 
 # Setup
 In settings menu, 
-1: enable 'Collection log - New addition notification'
-2: disable 'Collection log - New addition popup' (so you don't get duplicate popups)
+1. enable 'Collection log - New addition notification'
+2. disable 'Collection log - New addition popup' (so you don't get duplicate popups)
 ![alt text](collectionLogSettings.png)
 
 # Testing
 If you'd like to test the visuals of the plugin you can do so with:
-::clogtest X
+* ::clogtest X
 E.G '::clogtest 5' would show 5 random unlocks in a row
 OR
-::clogtest NAME
+* ::clogtest NAME
 E.G '::clogtest basilisk' jaw would show that specific item.
 
 Note: This doesn't actually unlock the clog ;) It's just for testing.

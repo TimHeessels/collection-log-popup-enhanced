@@ -1,0 +1,56 @@
+name: Update drop rates
+
+# Regenerates drop-rates.json from the OSRS Wiki (see scripts/generate-drop-rates.py) and publishes
+# it to the orphan "data" branch, which the plugin's RemoteDropRateUpdater fetches at runtime. This
+# keeps drop-rate data fresh between plugin releases without needing a new Hub version - see
+# src/main/java/com/snakesteak/collectionlogpopupenhanced/droprate/RemoteDropRateUpdater.java.
+#
+# Scheduled a day after the usual Wednesday OSRS update so the wiki has had time to update its
+# drop-table data first.
+on:
+  schedule:
+    - cron: '0 6 * * 4'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-drop-rates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Generate drop-rates.json
+        run: python scripts/generate-drop-rates.py
+
+      - name: Publish to data branch
+        env:
+          GENERATED_FILE: src/main/resources/com/snakesteak/collectionlogpopupenhanced/drop-rates.json
+        run: |
+          set -e
+          cp "$GENERATED_FILE" /tmp/drop-rates.json
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git fetch origin data; then
+            git checkout -B data origin/data
+          else
+            git checkout --orphan data
+            git rm -rf . > /dev/null
+          fi
+
+          cp /tmp/drop-rates.json ./drop-rates.json
+          git add drop-rates.json
+
+          if git diff --cached --quiet; then
+            echo "No changes to drop rates - skipping commit."
+          else
+            git commit -m "Update drop rates"
+            git push origin data
+          fi

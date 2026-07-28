@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced;
 
 import com.google.inject.Provides;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
+import com.snakesteak.collectionlogpopupenhanced.droprate.RemoteDropRateUpdater;
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
@@ -72,6 +73,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private DropRateResolver dropRateResolver;
 
 	@Inject
+	private RemoteDropRateUpdater remoteDropRateUpdater;
+
+	@Inject
 	private EventBus eventBus;
 
 	@Inject
@@ -89,6 +93,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		eventBus.register(itemIdResolver);
 		eventBus.register(killCountTracker);
 		overlayManager.add(collectionLogOverlay);
+		remoteDropRateUpdater.startUp();
 		log.debug("Collection Log Popup Enhanced started!");
 	}
 
@@ -99,6 +104,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		eventBus.unregister(killCountTracker);
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
+		remoteDropRateUpdater.shutDown();
 		log.debug("Collection Log Popup Enhanced stopped!");
 	}
 

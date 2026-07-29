@@ -34,6 +34,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	String audioSection = "audioSection";
 
+	@ConfigSection(
+		name = "Page progress",
+		description = "Locally-tracked collection log page completion - no data ever leaves your computer",
+		position = 3
+	)
+	String pageProgressSection = "pageProgressSection";
+
 	@ConfigItem(
 		keyName = "rarityBasis",
 		name = "Rarity based on",
@@ -64,7 +71,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	default LeftPanelStat leftPanelStat()
 	{
-		return LeftPanelStat.KILL_COUNT;
+		return LeftPanelStat.PAGE_PROGRESS;
 	}
 
 	@ConfigItem(
@@ -165,5 +172,16 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	default int soundVolume()
 	{
 		return 75;
+	}
+
+	@ConfigItem(
+		keyName = "resyncPageProgress",
+		name = "Resync page progress",
+		description = "Re-runs a full collection log search to refresh your locally tracked page progress (same technique the wiki's WikiSync plugin uses to read the log, but nothing leaves your computer). Turns itself back off once triggered.",
+		section = pageProgressSection
+	)
+	default boolean resyncPageProgress()
+	{
+		return false;
 	}
 }

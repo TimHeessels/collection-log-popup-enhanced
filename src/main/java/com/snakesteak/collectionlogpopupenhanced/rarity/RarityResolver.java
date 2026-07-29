@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -30,9 +31,9 @@ import net.runelite.client.game.ItemManager;
 @Singleton
 public class RarityResolver
 {
-	private static final String COMPLETION_RESOURCE = "/com/snakesteak/collectionlogpopupenhanced/rarity-overrides.json";
+	private static final String COMPLETION_RESOURCE = "/com/snakesteak/collectionlogpopupenhanced/collection-log.json";
 
-	static final Type DATASET_TYPE = new TypeToken<Map<String, Double>>()
+	static final Type DATASET_TYPE = new TypeToken<Map<String, CompletionEntry>>()
 	{
 	}.getType();
 
@@ -62,9 +63,39 @@ public class RarityResolver
 	 * {@code RemoteRarityOverridesUpdater} once it has a parsed, non-empty replacement. Safe to call
 	 * from any thread; readers always see either the old or new dataset, never a partial one.
 	 */
-	void reload(Map<String, Double> raw)
+	void reload(Map<String, CompletionEntry> raw)
 	{
 		this.completionData = new CompletionData(raw);
+	}
+
+	/**
+	 * @param itemId resolved item id
+	 * @return the collection log page name(s) {@code itemId} belongs to, per the wiki's own "tabs"
+	 *         field (mixes specific page names like "Zulrah" with broader categories like "Slayer") -
+	 *         empty if the item is unknown or has no entry.
+	 */
+	public List<String> tabsFor(int itemId)
+	{
+		CompletionEntry entry = completionData.byId.get(itemId);
+		return entry != null && entry.tabs != null ? entry.tabs : List.of();
+	}
+
+	/**
+	 * @param pageName a collection log page name (e.g. "Zulrah")
+	 * @return how many collection log items list {@code pageName} among their tabs, case-insensitive -
+	 *         the total/denominator for that page's completion progress.
+	 */
+	public int totalItemsOnPage(String pageName)
+	{
+		int count = 0;
+		for (CompletionEntry entry : completionData.byId.values())
+		{
+			if (entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(pageName)))
+			{
+				count++;
+			}
+		}
+		return count;
 	}
 
 	/**
@@ -85,7 +116,7 @@ public class RarityResolver
 		return shuffled.subList(0, Math.min(count, shuffled.size()));
 	}
 
-	private static Map<String, Double> loadBundled(Gson gson)
+	private static Map<String, CompletionEntry> loadBundled(Gson gson)
 	{
 		try (Reader reader = openResource(COMPLETION_RESOURCE))
 		{
@@ -117,7 +148,7 @@ public class RarityResolver
 
 		if (PetItems.names().contains(itemName))
 		{
-			return new RarityResult(RarityTier.PET, itemId, price, highAlch, data.byId.get(itemId), null, 0, 100, 0, 0, 0, alchPrice);
+			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercent(data, itemId), null, 0, 100, 0, 0, 0, alchPrice);
 		}
 
 		if (data.byId.isEmpty())
@@ -126,7 +157,7 @@ public class RarityResolver
 		}
 
 		Dataset dataset = buildDataset(data);
-		Double compPercent = itemId >= 0 ? data.byId.get(itemId) : null;
+		Double compPercent = compPercent(data, itemId);
 		RarityBasis basis = config.rarityBasis();
 
 		double score;
@@ -179,6 +210,16 @@ public class RarityResolver
 		RarityTier tier = bucketByPercentile(percentile);
 		return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, percentile,
 			dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+	}
+
+	private static Double compPercent(CompletionData data, int itemId)
+	{
+		if (itemId < 0)
+		{
+			return null;
+		}
+		CompletionEntry entry = data.byId.get(itemId);
+		return entry != null ? entry.comp : null;
 	}
 
 	/**
@@ -273,7 +314,13 @@ public class RarityResolver
 	 */
 	private Dataset buildDataset(CompletionData data)
 	{
-		int n = data.byId.size();
+		// Only entries with a real completion score - items pending a wiki score (comp == null)
+		// have nothing to rank a completion-based percentile against.
+		List<Map.Entry<Integer, CompletionEntry>> scored = data.byId.entrySet().stream()
+			.filter(entry -> entry.getValue().comp != null)
+			.collect(Collectors.toList());
+
+		int n = scored.size();
 		double[] logPrices = new double[n];
 		double[] compPercents = new double[n];
 		boolean[] hasPositivePrice = new boolean[n];
@@ -281,12 +328,12 @@ public class RarityResolver
 		double logPriceMax = Double.NEGATIVE_INFINITY;
 
 		int i = 0;
-		for (Map.Entry<Integer, Double> entry : data.byId.entrySet())
+		for (Map.Entry<Integer, CompletionEntry> entry : scored)
 		{
 			int price = getPrice(entry.getKey());
 			double logPrice = logPrice(price);
 			logPrices[i] = logPrice;
-			compPercents[i] = entry.getValue();
+			compPercents[i] = entry.getValue().comp;
 			hasPositivePrice[i] = price > 0;
 			logPriceMin = Math.min(logPriceMin, logPrice);
 			logPriceMax = Math.max(logPriceMax, logPrice);
@@ -324,24 +371,42 @@ public class RarityResolver
 	}
 
 	/**
-	 * Bundles the parsed completion-percent-by-item-id map with the item id list derived from it, so
+	 * One item's entry in rarity-overrides.json - name/tabs come from the wiki's canonical item list,
+	 * comp from its completion-percentage dataset (see scripts/generate-rarity-overrides.py). comp is
+	 * null for items the wiki hasn't gathered a completion score for yet (e.g. very recently added).
+	 */
+	static final class CompletionEntry
+	{
+		String name;
+		List<String> tabs;
+		Double comp;
+	}
+
+	/**
+	 * Bundles the parsed per-item entries with the item id list derived from them, so
 	 * {@link #reload(Map)} can swap both atomically via a single volatile write - readers never see
 	 * one already updated while the other is still the old dataset.
 	 */
 	private static final class CompletionData
 	{
-		private final Map<Integer, Double> byId;
+		private final Map<Integer, CompletionEntry> byId;
 		private final List<Integer> ids;
 
-		private CompletionData(Map<String, Double> raw)
+		private CompletionData(Map<String, CompletionEntry> raw)
 		{
-			Map<Integer, Double> parsed = new TreeMap<>();
+			Map<Integer, CompletionEntry> parsed = new TreeMap<>();
 			if (raw != null)
 			{
-				raw.forEach((id, percent) -> parsed.put(Integer.parseInt(id), percent));
+				raw.forEach((id, entry) -> parsed.put(Integer.parseInt(id), entry));
 			}
 			this.byId = Collections.unmodifiableMap(parsed);
-			this.ids = List.copyOf(parsed.keySet());
+			// Only ids with a real completion score - randomItemIds() (the "::clogtest" dev command)
+			// should only ever test items that actually have one, same as before this class also
+			// started carrying comp-less entries (for their name/tabs data).
+			this.ids = parsed.entrySet().stream()
+				.filter(entry -> entry.getValue().comp != null)
+				.map(Map.Entry::getKey)
+				.collect(Collectors.toList());
 		}
 	}
 

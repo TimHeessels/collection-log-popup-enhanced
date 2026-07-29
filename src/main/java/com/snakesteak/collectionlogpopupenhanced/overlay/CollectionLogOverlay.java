@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced.overlay;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
+import com.snakesteak.collectionlogpopupenhanced.progress.CollectionLogProgressTracker.PageProgress;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityTier;
 import com.snakesteak.collectionlogpopupenhanced.sound.SoundManager;
 import java.awt.AlphaComposite;
@@ -166,13 +167,14 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
-		Double compPercent, Integer killCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
+		Double compPercent, Integer killCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates,
+		String source, PageProgress pageProgress)
 	{
 		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
 		// batch - the only one that plays a sound when bulkUnlockSfx is on.
 		boolean batchStart = queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
-			dropProbability, ambiguousDropRates, batchStart));
+			dropProbability, ambiguousDropRates, source, pageProgress, batchStart));
 	}
 
 	public void clear()
@@ -507,14 +509,18 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * Kill count and Drop rate are the stats that can be unavailable for an item (no correlated
-	 * kill, or no known/unambiguous drop rate); each falls back to a stat that's always available.
-	 * Everything else has no fallback.
+	 * Page progress, Kill count and Drop rate are the stats that can be unavailable for an item (no
+	 * locally tracked page progress, no correlated kill, or no known/unambiguous drop rate
+	 * respectively); each falls back to a stat that's always available. Page progress falls back
+	 * through Kill count first, then Completion, since kill count and completion are themselves
+	 * already an established two-step fallback. Everything else has no fallback.
 	 */
 	private static PanelStat fallbackFor(PanelStat stat)
 	{
 		switch (stat)
 		{
+			case PAGE_PROGRESS:
+				return PanelStat.KILL_COUNT;
 			case KILL_COUNT:
 				return PanelStat.RARITY;
 			case DROP_RATE:
@@ -532,6 +538,14 @@ public class CollectionLogOverlay extends Overlay
 	{
 		switch (stat)
 		{
+			case PAGE_PROGRESS:
+				PageProgress pageProgress = item.getPageProgress();
+				if (pageProgress == null || item.getSource() == null)
+				{
+					return null;
+				}
+				return new Stat("Page: ", List.of(pageProgress.getObtained() + "/" + pageProgress.getTotal(),
+					"(" + item.getSource() + ")"), PRICE_VALUE_COLOR);
 			case VALUE:
 				boolean showAlch = config.valueDisplayMode() == ValueDisplayMode.HIGH_ALCH;
 				int displayPrice = showAlch ? item.getAlchPrice() : item.getPrice();
@@ -610,6 +624,8 @@ public class CollectionLogOverlay extends Overlay
 		Integer killCount;
 		Double dropProbability;
 		List<DropRateResolver.SourceRate> ambiguousDropRates;
+		String source;
+		PageProgress pageProgress;
 		boolean batchStart;
 	}
 

@@ -10,7 +10,8 @@ public enum PanelStat
 	VALUE("Value"),
 	RARITY("Completion"),
 	KILL_COUNT("Kill count"),
-	DROP_RATE("Drop rate");
+	DROP_RATE("Drop rate"),
+	PAGE_PROGRESS("Page progress");
 
 	private final String label;
 

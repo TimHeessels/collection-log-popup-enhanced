@@ -5,6 +5,7 @@ import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import com.snakesteak.collectionlogpopupenhanced.droprate.RemoteDropRateUpdater;
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
+import com.snakesteak.collectionlogpopupenhanced.progress.CollectionLogProgressTracker;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
@@ -21,6 +22,7 @@ import net.runelite.api.events.CommandExecuted;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -34,6 +36,8 @@ import net.runelite.client.util.Text;
 public class CollectionLogPopupEnhancedPlugin extends Plugin
 {
 	private static final Pattern NEW_COLLECTION_LOG_ITEM = Pattern.compile("New item added to your collection log: (.*)");
+
+	private static final String CONFIG_GROUP = "collection-log-popup-enhanced";
 
 	// Dev-only: "::clogtest [count]" shows random items from the rarity dataset; "::clogtest <item
 	// name> [kc]" runs a specific name through the real detection pipeline, optionally forcing a kill
@@ -62,6 +66,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private RemoteRarityOverridesUpdater remoteRarityOverridesUpdater;
 
 	@Inject
+	private CollectionLogProgressTracker progressTracker;
+
+	@Inject
 	private EventBus eventBus;
 
 	@Inject
@@ -70,11 +77,18 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Inject
 	private CollectionLogOverlay collectionLogOverlay;
 
+	@Inject
+	private CollectionLogPopupEnhancedConfig config;
+
+	@Inject
+	private ConfigManager configManager;
+
 	@Override
 	protected void startUp() throws Exception
 	{
 		eventBus.register(itemIdResolver);
 		eventBus.register(killCountTracker);
+		eventBus.register(progressTracker);
 		overlayManager.add(collectionLogOverlay);
 		remoteDropRateUpdater.startUp();
 		remoteRarityOverridesUpdater.startUp();
@@ -86,11 +100,25 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	{
 		eventBus.unregister(itemIdResolver);
 		eventBus.unregister(killCountTracker);
+		eventBus.unregister(progressTracker);
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
 		remoteDropRateUpdater.shutDown();
 		remoteRarityOverridesUpdater.shutDown();
 		log.debug("Collection Log Popup Enhanced stopped!");
+	}
+
+	@Subscribe
+	public void onConfigChanged(ConfigChanged configChanged)
+	{
+		if (!CONFIG_GROUP.equals(configChanged.getGroup()) || !"resyncPageProgress".equals(configChanged.getKey())
+			|| !config.resyncPageProgress())
+		{
+			return;
+		}
+
+		progressTracker.triggerFullResync();
+		configManager.setConfiguration(CONFIG_GROUP, "resyncPageProgress", false);
 	}
 
 	@Subscribe
@@ -232,11 +260,18 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			? dropRateResolver.dropRatesByItemName(itemName)
 			: List.of();
 
-		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {}, ambiguous rates {})",
-			itemName, itemId, resolvedVia, result, killCount, dropProbability, ambiguousDropRates);
+		CollectionLogProgressTracker.PageProgress pageProgress = null;
+		if (source != null)
+		{
+			progressTracker.recordObtained(result.getItemId());
+			pageProgress = progressTracker.progressFor(source);
+		}
+
+		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {}, ambiguous rates {}, page progress {})",
+			itemName, itemId, resolvedVia, result, killCount, dropProbability, ambiguousDropRates, pageProgress);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates);
+			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates, source, pageProgress);
 	}
 
 	@Provides

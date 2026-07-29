@@ -99,6 +99,35 @@ public class RarityResolver
 	}
 
 	/**
+	 * @return the total number of distinct items across the entire collection log - the denominator
+	 *         for overall (all-pages) completion progress.
+	 */
+	public int totalItems()
+	{
+		return completionData.byId.size();
+	}
+
+	/**
+	 * @param itemName a collection log item's display name
+	 * @return its item id per the bundled dataset (case-insensitive exact match), or null if unknown.
+	 *         Used by the dev-only "::clogtest" command to resolve items {@link ItemIdResolver} can't -
+	 *         it has no real inventory/ground event to observe for a synthetic test, so it only ever
+	 *         succeeds via a live GE search (tradeable items only). This works for anything actually in
+	 *         the collection log, tradeable or not.
+	 */
+	public Integer idForName(String itemName)
+	{
+		for (Map.Entry<Integer, CompletionEntry> entry : completionData.byId.entrySet())
+		{
+			if (itemName.equalsIgnoreCase(entry.getValue().name))
+			{
+				return entry.getKey();
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * @param count how many distinct item ids to return
 	 * @return up to {@code count} distinct, randomly chosen item ids from the collection log
 	 *         completion dataset (fewer if the dataset is smaller than {@code count}, empty if it

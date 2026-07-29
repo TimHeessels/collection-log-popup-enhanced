@@ -212,6 +212,12 @@ public class CollectionLogProgressTracker
 			return null;
 		}
 
+		// Reading progress doesn't otherwise imply a load has happened - only opening the real
+		// collection log, a resync, or a recorded unlock do (see ensureLoadedForCurrentPlayer's other
+		// callers). Without this, querying progress before any of those has fired this session (e.g.
+		// via ::clogtest) would show an empty in-memory set despite real data sitting on disk.
+		ensureLoadedForCurrentPlayer();
+
 		int obtained = 0;
 		for (int itemId : obtainedItemIds)
 		{
@@ -221,6 +227,15 @@ public class CollectionLogProgressTracker
 			}
 		}
 		return new PageProgress(obtained, total);
+	}
+
+	/**
+	 * @return this account's tracked progress across the entire collection log, all pages combined.
+	 */
+	public PageProgress overallProgress()
+	{
+		ensureLoadedForCurrentPlayer();
+		return new PageProgress(obtainedItemIds.size(), rarityResolver.totalItems());
 	}
 
 	private void ensureLoadedForCurrentPlayer()

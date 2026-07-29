@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
@@ -88,6 +89,8 @@ public class CollectionLogOverlay extends Overlay
 	private static final Color PET_COLOR = new Color(235, 120, 190);
 	private static final Color PRICE_LABEL_COLOR = COMMON_COLOR;
 	private static final Color PRICE_VALUE_COLOR = new Color(255, 205, 45);
+	// Matches the collection log interface's own green for a fully completed page.
+	private static final Color GREENLOGGED_COLOR = new Color(63, 201, 68);
 
 	private static final float CORNER_LABEL_FONT_SIZE = 16f;
 	private static final float CORNER_VALUE_FONT_SIZE = 19f;
@@ -168,13 +171,13 @@ public class CollectionLogOverlay extends Overlay
 
 	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
 		Double compPercent, Integer killCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates,
-		String source, PageProgress pageProgress)
+		String pageName, PageProgress pageProgress, PageProgress overallProgress)
 	{
 		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
 		// batch - the only one that plays a sound when bulkUnlockSfx is on.
 		boolean batchStart = queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
-			dropProbability, ambiguousDropRates, source, pageProgress, batchStart));
+			dropProbability, ambiguousDropRates, pageName, pageProgress, overallProgress, batchStart));
 	}
 
 	public void clear()
@@ -342,7 +345,11 @@ public class CollectionLogOverlay extends Overlay
 	{
 		graphics.setFont(labelMetrics.getFont());
 		graphics.setColor(PRICE_LABEL_COLOR);
-		graphics.drawString(stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, CORNER_LABEL_BASELINE_Y);
+		// Static labels ("Value: ", "KC: ", ...) always fit; Page progress's label is an arbitrary
+		// wiki page name (e.g. "Chambers of Xeric") that might not, so truncate unconditionally rather
+		// than special-casing which stats need it.
+		String label = truncate(graphics, stat.getLabel(), labelMetrics.getFont(), CORNER_TEXT_MAX_WIDTH);
+		graphics.drawString(label, rightAligned ? edgeX - labelMetrics.stringWidth(label) : edgeX, CORNER_LABEL_BASELINE_Y);
 
 		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
 		// a smaller font and tighter line spacing so both still fit above the item name.
@@ -352,13 +359,14 @@ public class CollectionLogOverlay extends Overlay
 		int lineHeight = multiLine ? CORNER_MULTI_VALUE_LINE_HEIGHT : 0;
 
 		graphics.setFont(valueFont);
-		graphics.setColor(stat.getValueColor());
 		int valueY = multiLine ? CORNER_MULTI_VALUE_FIRST_BASELINE_Y : CORNER_VALUE_BASELINE_Y;
-		for (String rawLine : stat.getValueLines())
+		List<String> valueLines = stat.getValueLines();
+		for (int i = 0; i < valueLines.size(); i++)
 		{
 			// Only the multi-line case bothers truncating - a fraction's denominator has no
 			// natural length cap, unlike the usual single-line stats.
-			String line = multiLine ? truncate(graphics, rawLine, valueFont, CORNER_TEXT_MAX_WIDTH) : rawLine;
+			String line = multiLine ? truncate(graphics, valueLines.get(i), valueFont, CORNER_TEXT_MAX_WIDTH) : valueLines.get(i);
+			graphics.setColor(stat.getValueColors().get(i));
 			graphics.drawString(line, rightAligned ? edgeX - activeValueMetrics.stringWidth(line) : edgeX, valueY);
 			valueY += lineHeight;
 		}
@@ -540,35 +548,42 @@ public class CollectionLogOverlay extends Overlay
 		{
 			case PAGE_PROGRESS:
 				PageProgress pageProgress = item.getPageProgress();
-				if (pageProgress == null || item.getSource() == null)
+				PageProgress overallProgress = item.getOverallProgress();
+				String pageName = item.getPageName();
+				if (pageProgress == null || overallProgress == null || pageName == null)
 				{
 					return null;
 				}
-				return new Stat("Page: ", List.of(pageProgress.getObtained() + "/" + pageProgress.getTotal(),
-					"(" + item.getSource() + ")"), PRICE_VALUE_COLOR);
+				boolean pageComplete = pageProgress.getObtained() >= pageProgress.getTotal();
+				Color greenloggedLineColor = pageComplete ? GREENLOGGED_COLOR : PRICE_VALUE_COLOR;
+				return new Stat(pageName,
+					List.of(
+						pageProgress.getObtained() + "/" + pageProgress.getTotal() + " greenlogged",
+						overallProgress.getObtained() + "/" + overallProgress.getTotal() + " total"),
+					List.of(greenloggedLineColor, PRICE_VALUE_COLOR));
 			case VALUE:
 				boolean showAlch = config.valueDisplayMode() == ValueDisplayMode.HIGH_ALCH;
 				int displayPrice = showAlch ? item.getAlchPrice() : item.getPrice();
 				boolean displayHighAlch = showAlch || item.isHighAlch();
 				String valueText = QuantityFormatter.formatNumber(displayPrice) + " gp" + (displayHighAlch ? " (HA)" : "");
-				return new Stat("Value: ", List.of(valueText), PRICE_VALUE_COLOR);
+				return Stat.uniform("Value: ", List.of(valueText), PRICE_VALUE_COLOR);
 			case RARITY:
 				if (item.getCompPercent() == null)
 				{
 					return null;
 				}
-				return new Stat("Wiki Comp%: ", List.of(String.format("%.1f%%", item.getCompPercent())), tierColor(item.getTier()));
+				return Stat.uniform("Wiki Comp%: ", List.of(String.format("%.1f%%", item.getCompPercent())), tierColor(item.getTier()));
 			case KILL_COUNT:
 				if (item.getKillCount() == null)
 				{
 					return null;
 				}
 				String killCountText = QuantityFormatter.formatNumber(item.getKillCount());
-				return new Stat("KC: ", List.of(killCountText), PRICE_VALUE_COLOR);
+				return Stat.uniform("KC: ", List.of(killCountText), PRICE_VALUE_COLOR);
 			case DROP_RATE:
 				if (item.getDropProbability() != null)
 				{
-					return new Stat("Drop rate: ", List.of(formatFraction(item.getDropProbability())), PRICE_VALUE_COLOR);
+					return Stat.uniform("Drop rate: ", List.of(formatFraction(item.getDropProbability())), PRICE_VALUE_COLOR);
 				}
 				// No single known rate - if it's a drop from exactly 2 tracked sources, show both
 				// instead of hiding the stat; more than that doesn't fit, so fall through to Value.
@@ -580,7 +595,7 @@ public class CollectionLogOverlay extends Overlay
 				List<String> ambiguousLines = ambiguous.stream()
 					.map(rate -> formatFraction(rate.getProbability()))
 					.collect(Collectors.toList());
-				return new Stat("Drop rate: ", ambiguousLines, PRICE_VALUE_COLOR);
+				return Stat.uniform("Drop rate: ", ambiguousLines, PRICE_VALUE_COLOR);
 			case NONE:
 			default:
 				return null;
@@ -624,8 +639,9 @@ public class CollectionLogOverlay extends Overlay
 		Integer killCount;
 		Double dropProbability;
 		List<DropRateResolver.SourceRate> ambiguousDropRates;
-		String source;
+		String pageName;
 		PageProgress pageProgress;
+		PageProgress overallProgress;
 		boolean batchStart;
 	}
 
@@ -641,6 +657,13 @@ public class CollectionLogOverlay extends Overlay
 	{
 		String label;
 		List<String> valueLines;
-		Color valueColor;
+		// One color per entry in valueLines - almost always all the same color (see uniform()), except
+		// Page progress's "greenlogged" line, which turns green independently of the "total" line.
+		List<Color> valueColors;
+
+		private static Stat uniform(String label, List<String> valueLines, Color valueColor)
+		{
+			return new Stat(label, valueLines, Collections.nCopies(valueLines.size(), valueColor));
+		}
 	}
 }

@@ -40,8 +40,13 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private static final String CONFIG_GROUP = "collection-log-popup-enhanced";
 
 	// Dev-only: "::clogtest [count]" shows random items from the rarity dataset; "::clogtest <item
-	// name> [kc]" runs a specific name through the real detection pipeline, optionally forcing a kill
-	// count. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
+	// name> [kc] [source]" runs a specific name through the real detection pipeline, optionally
+	// forcing a kill count and, in turn, a source name (e.g. "::clogtest jar of darkness 5 zulrah") -
+	// only meaningful together with a forced kill count, since a real kill always carries its own
+	// source. Lets Drop rate/KC be previewed without a genuine tracked kill; Page progress doesn't
+	// need this at all, since it's derived straight from the item's own wiki page data (see
+	// handleResolvedItem) rather than from a correlated kill. Only usable in --developer-mode (the
+	// gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
 
 	@Inject
@@ -133,7 +138,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (matcher.matches())
 		{
 			String itemName = Text.removeTags(matcher.group(1));
-			handleNewCollectionLogItem(null, itemName, null);
+			handleNewCollectionLogItem(null, itemName, null, null, true);
 		}
 	}
 
@@ -171,10 +176,31 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			}
 		}
 
-		// A non-negative last token is a forced kill count; everything before it is the item name.
+		// A non-negative token followed by a trailing non-numeric token is a forced kill count plus a
+		// forced page/source name override (e.g. "jar of darkness 5 zulrah"); a lone non-negative last
+		// token is just a forced kill count. Everything before either is the item name.
 		Integer forcedKillCount = null;
+		String forcedSource = null;
 		int nameArgCount = args.length;
-		if (args.length >= 2)
+		if (args.length >= 3)
+		{
+			try
+			{
+				int kc = Integer.parseInt(args[args.length - 2]);
+				if (kc >= 0)
+				{
+					forcedKillCount = kc;
+					forcedSource = args[args.length - 1];
+					nameArgCount = args.length - 2;
+				}
+			}
+			catch (NumberFormatException e)
+			{
+				// Second-to-last token isn't a kill count - fall through to the single-trailing-kc check below.
+			}
+		}
+
+		if (forcedKillCount == null && args.length >= 2)
 		{
 			try
 			{
@@ -192,7 +218,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		}
 
 		String itemName = String.join(" ", Arrays.copyOfRange(args, 0, nameArgCount));
-		handleNewCollectionLogItem(null, itemName, forcedKillCount);
+		handleNewCollectionLogItem(null, itemName, forcedKillCount, forcedSource, false);
 	}
 
 	private void testRandomDatasetItems(int count)
@@ -212,23 +238,37 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			int canonicalId = itemManager.canonicalize(itemId);
 			String itemName = itemManager.getItemComposition(canonicalId).getName();
-			handleNewCollectionLogItem(canonicalId, itemName, null);
+			handleNewCollectionLogItem(canonicalId, itemName, null, null, false);
 		}
 	}
 
-	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, Integer forcedKillCount)
+	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, Integer forcedKillCount, String forcedSource, boolean persistProgress)
 	{
 		if (knownItemId != null)
 		{
-			handleResolvedItem(knownItemId, itemName, "known", forcedKillCount);
+			handleResolvedItem(knownItemId, itemName, "known", forcedKillCount, forcedSource, persistProgress);
 			return;
 		}
 
+		if (!persistProgress)
+		{
+			// Dev-only test command (see TEST_COMMAND) - there's no real item/ground/inventory event to
+			// observe, so ItemIdResolver's detection can only ever fall back to a live GE search, which
+			// misses most non-tradeable collection log rewards. The bundled dataset has every item by
+			// name regardless of tradeability, so try that first.
+			Integer datasetId = rarityResolver.idForName(itemName);
+			if (datasetId != null)
+			{
+				handleResolvedItem(datasetId, itemName, "dataset", forcedKillCount, forcedSource, false);
+				return;
+			}
+		}
+
 		// Resolution is asynchronous - see ItemIdResolver.resolveIdByName javadoc.
-		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), forcedKillCount));
+		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), forcedKillCount, forcedSource, persistProgress));
 	}
 
-	private void handleResolvedItem(int itemId, String itemName, String resolvedVia, Integer forcedKillCount)
+	private void handleResolvedItem(int itemId, String itemName, String resolvedVia, Integer forcedKillCount, String forcedSource, boolean persistProgress)
 	{
 		RarityResult result = rarityResolver.resolve(itemId, itemName);
 
@@ -236,10 +276,11 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		String source;
 		if (forcedKillCount != null)
 		{
-			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill, so
-			// there's no known source either.
+			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill, so there's
+			// no known source either, unless the command explicitly forced a page/source name to
+			// preview Page progress without a genuine tracked kill.
 			killCount = forcedKillCount;
-			source = null;
+			source = forcedSource;
 		}
 		else
 		{
@@ -260,18 +301,38 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			? dropRateResolver.dropRatesByItemName(itemName)
 			: List.of();
 
-		CollectionLogProgressTracker.PageProgress pageProgress = null;
-		if (source != null)
+		// ::clogtest previews should never mutate real tracked progress - only a genuine chat-detected
+		// unlock (see onChatMessage) should grow the persisted obtained set. This runs regardless of
+		// whether a page/source is known below - every real unlock counts toward the tracked total.
+		if (persistProgress)
 		{
 			progressTracker.recordObtained(result.getItemId());
-			pageProgress = progressTracker.progressFor(source);
 		}
 
-		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {}, ambiguous rates {}, page progress {})",
-			itemName, itemId, resolvedVia, result, killCount, dropProbability, ambiguousDropRates, pageProgress);
+		// Page progress comes straight from the item's own wiki-sourced page list, not from a
+		// correlated kill count - a single-tab item unambiguously belongs to that one page whether or
+		// not this particular unlock had a trackable source (e.g. clue/minigame/skilling items, which
+		// never have a kill count at all). More than one tab means the item isn't tied to a single
+		// page, so there's nothing unambiguous to show.
+		CollectionLogProgressTracker.PageProgress pageProgress = null;
+		CollectionLogProgressTracker.PageProgress overallProgress = null;
+		String pageName = null;
+		List<String> tabs = rarityResolver.tabsFor(result.getItemId());
+		if (tabs.size() == 1)
+		{
+			pageName = tabs.get(0);
+			pageProgress = progressTracker.progressFor(pageName);
+			if (pageProgress != null)
+			{
+				overallProgress = progressTracker.overallProgress();
+			}
+		}
+
+		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {}, ambiguous rates {}, page progress {}, overall progress {})",
+			itemName, itemId, resolvedVia, result, killCount, dropProbability, ambiguousDropRates, pageProgress, overallProgress);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates, source, pageProgress);
+			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates, pageName, pageProgress, overallProgress);
 	}
 
 	@Provides

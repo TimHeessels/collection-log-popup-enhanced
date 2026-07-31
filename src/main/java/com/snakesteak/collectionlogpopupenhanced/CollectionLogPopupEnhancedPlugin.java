@@ -2,13 +2,13 @@ package com.snakesteak.collectionlogpopupenhanced;
 
 import com.google.inject.Provides;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
-import com.snakesteak.collectionlogpopupenhanced.droprate.RemoteDropRateUpdater;
+import com.snakesteak.collectionlogpopupenhanced.droprate.LocalDropRateDatasetLoader;
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
+import com.snakesteak.collectionlogpopupenhanced.rarity.LocalRarityDatasetLoader;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
-import com.snakesteak.collectionlogpopupenhanced.rarity.RemoteRarityOverridesUpdater;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -56,10 +56,10 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private DropRateResolver dropRateResolver;
 
 	@Inject
-	private RemoteDropRateUpdater remoteDropRateUpdater;
+	private LocalDropRateDatasetLoader localDropRateDatasetLoader;
 
 	@Inject
-	private RemoteRarityOverridesUpdater remoteRarityOverridesUpdater;
+	private LocalRarityDatasetLoader localRarityDatasetLoader;
 
 	@Inject
 	private EventBus eventBus;
@@ -76,8 +76,8 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		eventBus.register(itemIdResolver);
 		eventBus.register(killCountTracker);
 		overlayManager.add(collectionLogOverlay);
-		remoteDropRateUpdater.startUp();
-		remoteRarityOverridesUpdater.startUp();
+		localDropRateDatasetLoader.load();
+		localRarityDatasetLoader.load();
 		log.debug("Collection Log Popup Enhanced started!");
 	}
 
@@ -88,8 +88,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		eventBus.unregister(killCountTracker);
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
-		remoteDropRateUpdater.shutDown();
-		remoteRarityOverridesUpdater.shutDown();
 		log.debug("Collection Log Popup Enhanced stopped!");
 	}
 

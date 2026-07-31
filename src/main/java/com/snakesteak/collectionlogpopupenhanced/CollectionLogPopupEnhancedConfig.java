@@ -53,7 +53,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	default int overlayDisplaySeconds()
 	{
-		return 5;
+		return 6;
 	}
 
 	@ConfigItem(

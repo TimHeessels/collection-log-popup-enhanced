@@ -6,7 +6,7 @@ Displays a popup and (optional) sound effect based on rarity on new collection l
 # Setup
 In settings menu, 
 1. enable 'Collection log - New addition notification'
-2. disable 'Collection log - New addition popup' (so you don't get duplicate popups)
+2. enable 'Collection log - New addition popup'
 ![alt text](collectionLogSettings.png)
 
 # Testing

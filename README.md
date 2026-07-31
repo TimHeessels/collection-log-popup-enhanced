@@ -1,24 +1,30 @@
 # Collection Log Popup Enhanced
 Displays a popup and (optional) sound effect based on rarity on new collection logs.
 
-![alt text](image.png)
-
-![alt text](image-2.png)
+![alt text](pluginExample.png)
 
 # Setup
 In settings menu, 
 1. enable 'Collection log - New addition notification'
 2. disable 'Collection log - New addition popup' (so you don't get duplicate popups)
 ![alt text](collectionLogSettings.png)
-3. open collection log window once to sync current progress
+
+# Testing
+If you'd like to test the visuals of the plugin you can do so with:
+<p> ::clogtest X </p>
+<p> E.G '::clogtest 5' would show 5 random unlocks in a row </p>
+<p> OR </p>
+<p> ::clogtest NAME </p>
+<p> E.G '::clogtest basilisk' jaw would show that specific item. </p>
+
+Note: This doesn't actually unlock the clog ;) It's just for testing.
 
 # Popup
 The popup will apear on gaining a new collection log slot, and show the icon for the item.
 It also shows a different frame and sound effect based the completion rate of the item and the value (can be configured in settings to be either of the two or a combination)
 At the top of the panel two values are displayed (configurable in setting). These values are:
-- Collection log completion progress
--- both greenlog for that item and total (Requires you to have opened the clog window at least once after installing plugin)
 - KC at which you got the item 
+-- if no KC is available, it falls back to showing comp%
 - Completion 
 -- based on how many other players have this item (https://oldschool.runescape.wiki/w/Collection_log/Table)
 - Drop rate

@@ -61,9 +61,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from wiki_clog_data import USER_AGENT, fetch_clog_data
-
 BUCKET_API_URL = "https://oldschool.runescape.wiki/api.php"
+CLOG_ITEMS_URL = "https://oldschool.runescape.wiki/w/Module:Collection_log/data.json?action=raw"
+USER_AGENT = "CollectionLogPopupEnhancedDataGen/1.0 (RuneLite plugin drop-rate dataset generator)"
 
 OUTPUT_PATH = (
     Path(__file__).resolve().parent.parent
@@ -92,7 +92,9 @@ def parse_rarity(rarity):
 def fetch_clog_item_names():
     """Returns the sorted, de-duplicated list of every real collection log item's display name,
     from the wiki's own canonical module data."""
-    entries = fetch_clog_data()
+    req = urllib.request.Request(CLOG_ITEMS_URL, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        entries = json.loads(resp.read().decode("utf-8"))
     return sorted({entry["name"] for entry in entries if entry.get("name")})
 
 

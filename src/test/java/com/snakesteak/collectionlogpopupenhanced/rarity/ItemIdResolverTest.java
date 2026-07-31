@@ -1,7 +1,13 @@
 package com.snakesteak.collectionlogpopupenhanced.rarity;
 
+import com.google.gson.Gson;
+import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import net.runelite.api.Client;
 import net.runelite.api.Item;
 import net.runelite.api.ItemComposition;
@@ -14,6 +20,7 @@ import net.runelite.api.events.ItemSpawned;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.http.api.item.ItemPrice;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -22,11 +29,33 @@ import static org.junit.Assert.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * The pet-resolution test below needs the real collection-log.json fixture (see
+ * src/test/resources/local-only/README.md, gitignored) - all tests in this class are skipped
+ * rather than failed if it isn't present locally.
+ */
 public class ItemIdResolverTest
 {
+	private static final String FIXTURE = "/local-only/collection-log.json";
+
 	private Client client;
 	private ItemManager itemManager;
 	private ItemIdResolver resolver;
+
+	private static Map<String, RarityResolver.CompletionEntry> loadFixture()
+	{
+		InputStream stream = ItemIdResolverTest.class.getResourceAsStream(FIXTURE);
+		Assume.assumeTrue("Local fixture " + FIXTURE + " not present - see src/test/resources/local-only/README.md", stream != null);
+		Gson gson = new Gson();
+		try (Reader reader = new InputStreamReader(stream))
+		{
+			return gson.fromJson(reader, RarityResolver.DATASET_TYPE);
+		}
+		catch (Exception e)
+		{
+			throw new RuntimeException(e);
+		}
+	}
 
 	private static ItemPrice itemPrice(int id, String name)
 	{
@@ -75,7 +104,12 @@ public class ItemIdResolverTest
 	{
 		client = mock(Client.class);
 		itemManager = mock(ItemManager.class);
-		resolver = new ItemIdResolver(client, itemManager);
+		CollectionLogPopupEnhancedConfig config = new CollectionLogPopupEnhancedConfig()
+		{
+		};
+		RarityResolver rarityResolver = new RarityResolver(itemManager, config);
+		rarityResolver.reload(loadFixture());
+		resolver = new ItemIdResolver(client, itemManager, rarityResolver);
 
 		ItemContainer emptyInventory = inventoryOf();
 		when(client.getItemContainer(InventoryID.INV)).thenReturn(emptyInventory);

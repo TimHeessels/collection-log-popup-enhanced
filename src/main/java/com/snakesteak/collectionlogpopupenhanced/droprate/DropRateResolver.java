@@ -1,9 +1,6 @@
 package com.snakesteak.collectionlogpopupenhanced.droprate;
 
 import com.google.common.reflect.TypeToken;
-import com.google.gson.Gson;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,15 +13,14 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Resolves how likely a collection log item was to drop from a given source, per kill, from a
- * dataset generated offline by scripts/generate-drop-rates.py - initially the copy bundled with the
- * plugin, optionally kept fresh at runtime by {@link RemoteDropRateUpdater} (see its javadoc).
+ * dataset generated offline (see the osrs-collection-log-data repo's generate-drop-rates.py) and
+ * fetched at runtime by {@link RemoteDropRateUpdater} (see its javadoc). Starts out empty until that
+ * first fetch completes.
  */
 @Slf4j
 @Singleton
 public class DropRateResolver
 {
-	private static final String DROP_RATES_RESOURCE = "/com/snakesteak/collectionlogpopupenhanced/drop-rates.json";
-
 	static final Type DATASET_TYPE = new TypeToken<Map<String, Map<String, Double>>>()
 	{
 	}.getType();
@@ -32,9 +28,9 @@ public class DropRateResolver
 	private volatile Map<String, Map<String, Double>> dropRatesBySource;
 
 	@Inject
-	public DropRateResolver(Gson gson)
+	public DropRateResolver()
 	{
-		this.dropRatesBySource = normalize(loadBundled(gson));
+		this.dropRatesBySource = normalize(Map.of());
 	}
 
 	/**
@@ -97,24 +93,6 @@ public class DropRateResolver
 			}
 		}
 		return matches;
-	}
-
-	private static Map<String, Map<String, Double>> loadBundled(Gson gson)
-	{
-		try (Reader reader = openResource())
-		{
-			return gson.fromJson(reader, DATASET_TYPE);
-		}
-		catch (Exception e)
-		{
-			log.warn("Failed to load drop rate data", e);
-			return Map.of();
-		}
-	}
-
-	private static Reader openResource()
-	{
-		return new InputStreamReader(DropRateResolver.class.getResourceAsStream(DROP_RATES_RESOURCE));
 	}
 
 	private static Map<String, Map<String, Double>> normalize(Map<String, Map<String, Double>> raw)

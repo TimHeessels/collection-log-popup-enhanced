@@ -1,10 +1,7 @@
 package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.common.reflect.TypeToken;
-import com.google.gson.Gson;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -13,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
@@ -24,15 +22,18 @@ import net.runelite.client.game.ItemManager;
  * - value: GE price, log-scaled since price spans orders of magnitude
  * The composite score is bucketed into tiers by percentile rank across the whole dataset, rather
  * than fixed cutoffs, so the tier distribution stays consistent as items get added over time.
- * Pets are matched by name ahead of all of this (see {@link PetItems}).
+ * Pets are matched by name ahead of all of this - see {@link #petIdForName}, derived from the same
+ * dataset's "All Pets" tab rather than a hand-maintained list, since pets never enter the player's
+ * inventory or land on the ground when unlocked (they attach directly as a follower NPC), so
+ * {@link ItemIdResolver}'s inventory/ground/GE-search pipeline can never find them any other way.
  */
 @Slf4j
 @Singleton
 public class RarityResolver
 {
-	private static final String COMPLETION_RESOURCE = "/com/snakesteak/collectionlogpopupenhanced/rarity-overrides.json";
+	private static final String PET_TAB = "All Pets";
 
-	static final Type DATASET_TYPE = new TypeToken<Map<String, Double>>()
+	static final Type DATASET_TYPE = new TypeToken<Map<String, CompletionEntry>>()
 	{
 	}.getType();
 
@@ -50,11 +51,11 @@ public class RarityResolver
 	private volatile CompletionData completionData;
 
 	@Inject
-	public RarityResolver(ItemManager itemManager, CollectionLogPopupEnhancedConfig config, Gson gson)
+	public RarityResolver(ItemManager itemManager, CollectionLogPopupEnhancedConfig config)
 	{
 		this.itemManager = itemManager;
 		this.config = config;
-		this.completionData = new CompletionData(loadBundled(gson));
+		this.completionData = new CompletionData(Map.of());
 	}
 
 	/**
@@ -62,9 +63,18 @@ public class RarityResolver
 	 * {@code RemoteRarityOverridesUpdater} once it has a parsed, non-empty replacement. Safe to call
 	 * from any thread; readers always see either the old or new dataset, never a partial one.
 	 */
-	void reload(Map<String, Double> raw)
+	void reload(Map<String, CompletionEntry> raw)
 	{
 		this.completionData = new CompletionData(raw);
+	}
+
+	/**
+	 * @return the pet's item id, or {@code null} if {@code name} isn't a known pet (i.e. no dataset
+	 *         entry has it tagged with the "All Pets" tab)
+	 */
+	Integer petIdForName(String name)
+	{
+		return completionData.petIdByName.get(name);
 	}
 
 	/**
@@ -85,24 +95,6 @@ public class RarityResolver
 		return shuffled.subList(0, Math.min(count, shuffled.size()));
 	}
 
-	private static Map<String, Double> loadBundled(Gson gson)
-	{
-		try (Reader reader = openResource(COMPLETION_RESOURCE))
-		{
-			return gson.fromJson(reader, DATASET_TYPE);
-		}
-		catch (Exception e)
-		{
-			log.warn("Failed to load collection log completion data", e);
-			return Map.of();
-		}
-	}
-
-	private static Reader openResource(String path)
-	{
-		return new InputStreamReader(RarityResolver.class.getResourceAsStream(path));
-	}
-
 	/**
 	 * @param itemId resolved item id, or -1 if it couldn't be resolved (see ItemIdResolver). Falls
 	 *                back to a value-score-only composite using price 0 in that case, same as an
@@ -115,9 +107,9 @@ public class RarityResolver
 		boolean highAlch = isHighAlchPrice(itemId);
 		int alchPrice = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
 
-		if (PetItems.names().contains(itemName))
+		if (data.petIdByName.containsKey(itemName))
 		{
-			return new RarityResult(RarityTier.PET, itemId, price, highAlch, data.byId.get(itemId), null, 0, 100, 0, 0, 0, alchPrice);
+			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercent(data, itemId), null, 0, 100, 0, 0, 0, alchPrice);
 		}
 
 		if (data.byId.isEmpty())
@@ -126,7 +118,7 @@ public class RarityResolver
 		}
 
 		Dataset dataset = buildDataset(data);
-		Double compPercent = itemId >= 0 ? data.byId.get(itemId) : null;
+		Double compPercent = compPercent(data, itemId);
 		RarityBasis basis = config.rarityBasis();
 
 		double score;
@@ -179,6 +171,16 @@ public class RarityResolver
 		RarityTier tier = bucketByPercentile(percentile);
 		return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, percentile,
 			dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+	}
+
+	private static Double compPercent(CompletionData data, int itemId)
+	{
+		if (itemId < 0)
+		{
+			return null;
+		}
+		CompletionEntry entry = data.byId.get(itemId);
+		return entry != null ? entry.comp : null;
 	}
 
 	/**
@@ -273,7 +275,13 @@ public class RarityResolver
 	 */
 	private Dataset buildDataset(CompletionData data)
 	{
-		int n = data.byId.size();
+		// Only entries with a real completion score - items pending a wiki score (comp == null) have
+		// nothing to rank a completion-based percentile against.
+		List<Map.Entry<Integer, CompletionEntry>> scored = data.byId.entrySet().stream()
+			.filter(entry -> entry.getValue().comp != null)
+			.collect(Collectors.toList());
+
+		int n = scored.size();
 		double[] logPrices = new double[n];
 		double[] compPercents = new double[n];
 		boolean[] hasPositivePrice = new boolean[n];
@@ -281,12 +289,12 @@ public class RarityResolver
 		double logPriceMax = Double.NEGATIVE_INFINITY;
 
 		int i = 0;
-		for (Map.Entry<Integer, Double> entry : data.byId.entrySet())
+		for (Map.Entry<Integer, CompletionEntry> entry : scored)
 		{
 			int price = getPrice(entry.getKey());
 			double logPrice = logPrice(price);
 			logPrices[i] = logPrice;
-			compPercents[i] = entry.getValue();
+			compPercents[i] = entry.getValue().comp;
 			hasPositivePrice[i] = price > 0;
 			logPriceMin = Math.min(logPriceMin, logPrice);
 			logPriceMax = Math.max(logPriceMax, logPrice);
@@ -324,24 +332,54 @@ public class RarityResolver
 	}
 
 	/**
-	 * Bundles the parsed completion-percent-by-item-id map with the item id list derived from it, so
-	 * {@link #reload(Map)} can swap both atomically via a single volatile write - readers never see
-	 * one already updated while the other is still the old dataset.
+	 * One item's entry in collection-log.json. name/tabs come from the wiki's canonical item list,
+	 * comp from its completion-percentage dataset (see the osrs-collection-log-data repo's
+	 * generate-collection-log.py). comp is null for items the wiki hasn't gathered a completion score
+	 * for yet (e.g. very recently added).
+	 */
+	static final class CompletionEntry
+	{
+		String name;
+		List<String> tabs;
+		Double comp;
+	}
+
+	/**
+	 * Bundles the parsed per-item entries with the item id list and pet name index derived from
+	 * them, so {@link #reload(Map)} can swap all three atomically via a single volatile write -
+	 * readers never see one already updated while the others are still the old dataset.
 	 */
 	private static final class CompletionData
 	{
-		private final Map<Integer, Double> byId;
+		private final Map<Integer, CompletionEntry> byId;
 		private final List<Integer> ids;
+		private final Map<String, Integer> petIdByName;
 
-		private CompletionData(Map<String, Double> raw)
+		private CompletionData(Map<String, CompletionEntry> raw)
 		{
-			Map<Integer, Double> parsed = new TreeMap<>();
+			Map<Integer, CompletionEntry> parsed = new TreeMap<>();
 			if (raw != null)
 			{
-				raw.forEach((id, percent) -> parsed.put(Integer.parseInt(id), percent));
+				raw.forEach((id, entry) -> parsed.put(Integer.parseInt(id), entry));
 			}
 			this.byId = Collections.unmodifiableMap(parsed);
-			this.ids = List.copyOf(parsed.keySet());
+			// Only ids with a real completion score - randomItemIds() (the "::clogtest" dev command)
+			// should only ever test items that actually have one, same as before this class also
+			// started carrying comp-less entries (for their name/tabs data).
+			this.ids = parsed.entrySet().stream()
+				.filter(entry -> entry.getValue().comp != null)
+				.map(Map.Entry::getKey)
+				.collect(Collectors.toList());
+
+			Map<String, Integer> pets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+			parsed.forEach((id, entry) ->
+			{
+				if (entry.name != null && entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(PET_TAB)))
+				{
+					pets.put(entry.name, id);
+				}
+			});
+			this.petIdByName = Collections.unmodifiableMap(pets);
 		}
 	}
 

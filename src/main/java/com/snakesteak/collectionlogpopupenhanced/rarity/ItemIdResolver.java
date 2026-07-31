@@ -22,8 +22,9 @@ import net.runelite.http.api.item.ItemPrice;
 /**
  * Resolves an item's id from its display name - the chat message that drives collection log
  * detection only ever gives us a name, never an id. Checked in order:
- * 1. {@link PetItems}, a static name-to-id lookup (pets attach as a follower NPC rather than
- *    entering the inventory or landing on the ground, so none of the checks below can find one)
+ * 1. {@link RarityResolver#petIdForName}, a name-to-id lookup derived from the wiki dataset's "All
+ *    Pets" tag (pets attach as a follower NPC rather than entering the inventory or landing on the
+ *    ground, so none of the checks below can find one)
  * 2. Current inventory (covers the rare case where the inventory update already landed)
  * 3. Ground items tracked via spawn/despawn events (covers drops and pickpocketing overflow still
  *    sitting on the ground, unpicked)
@@ -54,6 +55,7 @@ public class ItemIdResolver
 
 	private final Client client;
 	private final ItemManager itemManager;
+	private final RarityResolver rarityResolver;
 	private final Multiset<Integer> groundItemIds = HashMultiset.create();
 
 	// Set while waiting on the inventory update for a name that couldn't be resolved synchronously.
@@ -62,10 +64,11 @@ public class ItemIdResolver
 	private ResolveCallback pendingCallback;
 
 	@Inject
-	public ItemIdResolver(Client client, ItemManager itemManager)
+	public ItemIdResolver(Client client, ItemManager itemManager, RarityResolver rarityResolver)
 	{
 		this.client = client;
 		this.itemManager = itemManager;
+		this.rarityResolver = rarityResolver;
 	}
 
 	@Subscribe
@@ -126,7 +129,7 @@ public class ItemIdResolver
 	 */
 	public void resolveIdByName(String itemName, ResolveCallback callback)
 	{
-		Integer petItemId = PetItems.idForName(itemName);
+		Integer petItemId = rarityResolver.petIdForName(itemName);
 		if (petItemId != null)
 		{
 			callback.accept(petItemId, Source.PET);

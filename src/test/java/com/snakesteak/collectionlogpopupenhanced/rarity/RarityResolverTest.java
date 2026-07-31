@@ -2,8 +2,13 @@ package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.gson.Gson;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.util.Map;
 import net.runelite.api.ItemComposition;
 import net.runelite.client.game.ItemManager;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -14,12 +19,17 @@ import static org.mockito.Mockito.when;
 
 /**
  * Expected percentiles/tiers below are derived by replaying the resolver's exact algorithm in a
- * throwaway script against the real bundled rarity-overrides.json (1705 entries as of writing) -
+ * throwaway script against the real dataset fixture below (1705 scored entries as of writing) -
  * see conversation history for the derivation. These aren't hand-picked to "look right"; they're
  * the actual output of the composite-score + percentile-rank math for these real dataset ids.
+ *
+ * The fixture is gitignored (see src/test/resources/local-only/README.md) - these tests are
+ * skipped rather than failed if it isn't present locally.
  */
 public class RarityResolverTest
 {
+	private static final String FIXTURE = "/local-only/collection-log.json";
+
 	private ItemManager itemManager;
 	private RarityResolver resolver;
 
@@ -34,7 +44,23 @@ public class RarityResolverTest
 		CollectionLogPopupEnhancedConfig config = new CollectionLogPopupEnhancedConfig()
 		{
 		};
-		resolver = new RarityResolver(itemManager, config, new Gson());
+		resolver = new RarityResolver(itemManager, config);
+		resolver.reload(loadFixture());
+	}
+
+	private static Map<String, RarityResolver.CompletionEntry> loadFixture()
+	{
+		InputStream stream = RarityResolverTest.class.getResourceAsStream(FIXTURE);
+		Assume.assumeTrue("Local fixture " + FIXTURE + " not present - see src/test/resources/local-only/README.md", stream != null);
+		Gson gson = new Gson();
+		try (Reader reader = new InputStreamReader(stream))
+		{
+			return gson.fromJson(reader, RarityResolver.DATASET_TYPE);
+		}
+		catch (Exception e)
+		{
+			throw new RuntimeException(e);
+		}
 	}
 
 	@Test

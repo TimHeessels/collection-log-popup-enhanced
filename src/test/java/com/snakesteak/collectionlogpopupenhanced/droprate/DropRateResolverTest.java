@@ -1,7 +1,12 @@
 package com.snakesteak.collectionlogpopupenhanced.droprate;
 
 import com.google.gson.Gson;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.util.List;
+import java.util.Map;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -10,18 +15,39 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Loaded against the real bundled drop-rates.json (see scripts/generate-drop-rates.py). Abyssal
- * Sire -> Unsired is a simple, verified 1/100 single-roll drop, used here as a stable reference
- * point.
+ * Loaded against the real dataset fixture below (see the osrs-collection-log-data repo's
+ * generate-drop-rates.py). Abyssal Sire -> Unsired is a simple, verified 1/100 single-roll drop,
+ * used here as a stable reference point.
+ *
+ * The fixture is gitignored (see src/test/resources/local-only/README.md) - these tests are
+ * skipped rather than failed if it isn't present locally.
  */
 public class DropRateResolverTest
 {
+	private static final String FIXTURE = "/local-only/drop-rates.json";
+
 	private DropRateResolver resolver;
 
 	@Before
 	public void before()
 	{
-		resolver = new DropRateResolver(new Gson());
+		resolver = new DropRateResolver();
+		resolver.reload(loadFixture());
+	}
+
+	private static Map<String, Map<String, Double>> loadFixture()
+	{
+		InputStream stream = DropRateResolverTest.class.getResourceAsStream(FIXTURE);
+		Assume.assumeTrue("Local fixture " + FIXTURE + " not present - see src/test/resources/local-only/README.md", stream != null);
+		Gson gson = new Gson();
+		try (Reader reader = new InputStreamReader(stream))
+		{
+			return gson.fromJson(reader, DropRateResolver.DATASET_TYPE);
+		}
+		catch (Exception e)
+		{
+			throw new RuntimeException(e);
+		}
 	}
 
 	@Test

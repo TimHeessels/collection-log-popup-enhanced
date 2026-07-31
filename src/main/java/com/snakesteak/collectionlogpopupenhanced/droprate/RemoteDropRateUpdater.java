@@ -14,16 +14,17 @@ import net.runelite.client.RuneLite;
 import okhttp3.OkHttpClient;
 
 /**
- * Keeps {@link DropRateResolver}'s dataset fresher than the plugin's own release cadence by
- * periodically re-downloading drop-rates.json from this repo's "data" branch, which a scheduled
- * GitHub Actions workflow (.github/workflows/update-plugin-data.yml) regenerates from the wiki
- * roughly weekly. See {@link RemoteJsonDatasetSync} for the shared fetch/cache/fallback mechanics.
+ * Keeps {@link DropRateResolver}'s dataset fresh by periodically downloading drop-rates.json from
+ * the osrs-collection-log-data repo's "data" branch, which a scheduled GitHub Actions workflow there
+ * regenerates from the wiki roughly weekly. There's no bundled fallback copy - this is the only
+ * source of the dataset, so {@link DropRateResolver} starts out empty until this first succeeds. See
+ * {@link RemoteJsonDatasetSync} for the shared fetch/cache/fallback mechanics.
  */
 @Singleton
 public class RemoteDropRateUpdater
 {
 	private static final String DATA_URL =
-		"https://raw.githubusercontent.com/TimHeessels/collection-log-popup-enhanced/data/drop-rates.json";
+		"https://raw.githubusercontent.com/TimHeessels/osrs-collection-log-data/data/drop-rates.json";
 
 	// Data is only regenerated weekly - re-fetching more often than this would just hit the CDN for
 	// an unchanged file.

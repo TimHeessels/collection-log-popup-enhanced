@@ -14,17 +14,19 @@ import net.runelite.client.RuneLite;
 import okhttp3.OkHttpClient;
 
 /**
- * Keeps {@link RarityResolver}'s collection log completion percentages fresher than the plugin's
- * own release cadence by periodically re-downloading rarity-overrides.json from this repo's "data"
- * branch, which a scheduled GitHub Actions workflow (.github/workflows/update-plugin-data.yml)
- * regenerates from the wiki's own Module:Collection_log/completion.json roughly weekly. See
+ * Keeps {@link RarityResolver}'s collection log completion percentages fresh by periodically
+ * downloading collection-log.json from the osrs-collection-log-data repo's "data" branch, which a
+ * scheduled GitHub Actions workflow there regenerates from the wiki's own
+ * Module:Collection_log/data.json and completion.json roughly weekly (see that repo's
+ * generate-collection-log.py). There's no bundled fallback copy - this is the only source of the
+ * dataset, so {@link RarityResolver} starts out empty until this first succeeds. See
  * {@link RemoteJsonDatasetSync} for the shared fetch/cache/fallback mechanics.
  */
 @Singleton
 public class RemoteRarityOverridesUpdater
 {
 	private static final String DATA_URL =
-		"https://raw.githubusercontent.com/TimHeessels/collection-log-popup-enhanced/data/rarity-overrides.json";
+		"https://raw.githubusercontent.com/TimHeessels/osrs-collection-log-data/data/collection-log.json";
 
 	// Data is only regenerated weekly - re-fetching more often than this would just hit the CDN for
 	// an unchanged file.
@@ -32,7 +34,7 @@ public class RemoteRarityOverridesUpdater
 	private static final long CHECK_INTERVAL_MINUTES = Duration.ofHours(6).toMinutes();
 
 	private final ScheduledExecutorService executor;
-	private final RemoteJsonDatasetSync<Map<String, Double>> sync;
+	private final RemoteJsonDatasetSync<Map<String, RarityResolver.CompletionEntry>> sync;
 
 	private ScheduledFuture<?> checkTask;
 
@@ -63,6 +65,6 @@ public class RemoteRarityOverridesUpdater
 	{
 		return RuneLite.RUNELITE_DIR.toPath()
 			.resolve("collection-log-popup-enhanced")
-			.resolve("rarity-overrides.json");
+			.resolve("collection-log.json");
 	}
 }

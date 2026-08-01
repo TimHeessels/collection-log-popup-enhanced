@@ -1,13 +1,18 @@
 # Collection Log Popup Enhanced
 Displays a popup and (optional) sound effect based on rarity on new collection logs.
 
-![alt text](pluginExample.png)
-
 # Setup
 In settings menu, 
 1. enable 'Collection log - New addition notification'
 2. enable 'Collection log - New addition popup'
 ![alt text](clogSettings.png)
+
+# Visuals
+![img_1.png](img_1.png)
+![alt text](image-2.png)
+![alt text](image.png)
+![alt text](image-4.png)
+![alt text](image-3.png)
 
 # Testing
 If you'd like to test the visuals of the plugin you can do so with:

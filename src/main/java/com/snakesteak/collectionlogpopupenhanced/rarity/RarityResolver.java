@@ -2,12 +2,14 @@ package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.common.reflect.TypeToken;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
@@ -22,6 +24,10 @@ import net.runelite.client.game.ItemManager;
  * - value: GE price, log-scaled since price spans orders of magnitude
  * The composite score is bucketed into tiers by percentile rank across the whole dataset, rather
  * than fixed cutoffs, so the tier distribution stays consistent as items get added over time.
+ * For items missing a completion score (e.g. recently added, not yet scored by the wiki) with no
+ * usable price either (untradeable, no GE listing, no alch value), a third fallback ranks against
+ * per-kill drop probability instead - see {@link #resolve} - so a rare-but-unpriced item doesn't
+ * silently default to the common tier just because no signal is populated yet.
  * Pets are matched by name ahead of all of this - see {@link #petIdForName}, derived from the same
  * dataset's "All Pets" tab rather than a hand-maintained list, since pets never enter the player's
  * inventory or land on the ground when unlocked (they attach directly as a follower NPC), so
@@ -48,13 +54,15 @@ public class RarityResolver
 
 	private final ItemManager itemManager;
 	private final CollectionLogPopupEnhancedConfig config;
+	private final DropRateResolver dropRateResolver;
 	private volatile CompletionData completionData;
 
 	@Inject
-	public RarityResolver(ItemManager itemManager, CollectionLogPopupEnhancedConfig config)
+	public RarityResolver(ItemManager itemManager, CollectionLogPopupEnhancedConfig config, DropRateResolver dropRateResolver)
 	{
 		this.itemManager = itemManager;
 		this.config = config;
+		this.dropRateResolver = dropRateResolver;
 		this.completionData = new CompletionData(Map.of());
 	}
 
@@ -75,6 +83,16 @@ public class RarityResolver
 	Integer petIdForName(String name)
 	{
 		return completionData.petIdByName.get(name);
+	}
+
+	/**
+	 * @return the collection log tab name(s) (i.e. boss/activity source(s)) that can drop {@code
+	 *         itemName}, per the wiki dataset - empty if {@code itemName} isn't a known collection log
+	 *         item or has no tab data.
+	 */
+	public List<String> tabsForItemName(String itemName)
+	{
+		return completionData.tabsByItemName.getOrDefault(itemName, List.of());
 	}
 
 	/**
@@ -140,31 +158,54 @@ public class RarityResolver
 		}
 		else if (basis == RarityBasis.VALUE)
 		{
-			if (dataset.positivePricedValueScores.length == 0)
+			if (price <= 0 || dataset.positivePricedValueScores.length == 0)
 			{
-				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, compPercent, completionScore,
-					valueScore, 0, dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+				Double dropRateScore = dropRarityScore(itemName);
+				if (dropRateScore != null && dataset.dropRateScores.length > 0)
+				{
+					score = dropRateScore;
+					distribution = dataset.dropRateScores;
+				}
+				else
+				{
+					return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, compPercent, completionScore,
+						valueScore, 0, dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+				}
 			}
-			score = valueScore;
-			distribution = dataset.positivePricedValueScores;
+			else
+			{
+				score = valueScore;
+				distribution = dataset.positivePricedValueScores;
+			}
 		}
 		else if (completionScore != null)
 		{
 			score = COMPLETION_WEIGHT * completionScore + VALUE_WEIGHT * valueScore;
 			distribution = dataset.compositeScores;
 		}
-		else if (dataset.positivePricedValueScores.length == 0)
-		{
-			// No completion data for this item, and nothing in the dataset has a usable positive
-			// price to rank it against (in practice, ItemManager's GE price cache hasn't finished
-			// loading yet). Nothing to legitimately rank against.
-			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-				dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
-		}
-		else
+		else if (price > 0 && dataset.positivePricedValueScores.length > 0)
 		{
 			score = valueScore;
 			distribution = dataset.positivePricedValueScores;
+		}
+		else
+		{
+			// No completion data for this item, and no usable price either (untradeable, unlisted, or
+			// the GE price cache hasn't finished loading yet) - fall back to per-kill drop probability,
+			// the last signal available for a genuinely new/unpriced item. Only if that's ALSO
+			// unavailable (not in drop-rates.json, or ambiguous across multiple sources) is there
+			// nothing left to legitimately rank against.
+			Double dropRateScore = dropRarityScore(itemName);
+			if (dropRateScore != null && dataset.dropRateScores.length > 0)
+			{
+				score = dropRateScore;
+				distribution = dataset.dropRateScores;
+			}
+			else
+			{
+				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
+					dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+			}
 		}
 
 		double percentile = percentileRank(distribution, score);
@@ -207,6 +248,19 @@ public class RarityResolver
 	private boolean isHighAlchPrice(int itemId)
 	{
 		return itemId >= 0 && itemManager.getItemPrice(itemId) <= 0;
+	}
+
+	/**
+	 * @return a 0-1 rarity score (rarer = closer to 1) from {@code itemName}'s per-kill drop
+	 *         probability, or {@code null} if it isn't in the drop-rate dataset, or is a notable drop
+	 *         from more than one source at different rates (see
+	 *         {@link DropRateResolver#dropProbabilityByItemName}). Unlike price, drop probabilities
+	 *         are already bounded 0-1 so no log-scaling is needed before ranking them.
+	 */
+	private Double dropRarityScore(String itemName)
+	{
+		Double probability = dropRateResolver.dropProbabilityByItemName(itemName);
+		return probability != null ? 1 - probability : null;
 	}
 
 	private double valueScore(int itemId, Dataset dataset)
@@ -328,7 +382,19 @@ public class RarityResolver
 		Arrays.sort(completionScores);
 		Arrays.sort(positivePricedValueScores);
 
-		return new Dataset(compositeScores, completionScores, positivePricedValueScores, logPriceMin, logPriceMax);
+		// Comp-less items (comp == null) are exactly the ones the drop-rate fallback exists for, so
+		// the ranking distribution is built from that same population's drop rates rather than from
+		// "scored" - an item with a completion score never needs this fallback and would just dilute
+		// the distribution's rarity range.
+		double[] dropRateScores = data.byId.values().stream()
+			.filter(entry -> entry.comp == null && entry.name != null)
+			.map(entry -> dropRarityScore(entry.name))
+			.filter(Objects::nonNull)
+			.mapToDouble(Double::doubleValue)
+			.sorted()
+			.toArray();
+
+		return new Dataset(compositeScores, completionScores, positivePricedValueScores, dropRateScores, logPriceMin, logPriceMax);
 	}
 
 	/**
@@ -354,6 +420,7 @@ public class RarityResolver
 		private final Map<Integer, CompletionEntry> byId;
 		private final List<Integer> ids;
 		private final Map<String, Integer> petIdByName;
+		private final Map<String, List<String>> tabsByItemName;
 
 		private CompletionData(Map<String, CompletionEntry> raw)
 		{
@@ -372,14 +439,24 @@ public class RarityResolver
 				.collect(Collectors.toList());
 
 			Map<String, Integer> pets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+			Map<String, List<String>> tabs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 			parsed.forEach((id, entry) ->
 			{
-				if (entry.name != null && entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(PET_TAB)))
+				if (entry.name == null)
+				{
+					return;
+				}
+				if (entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(PET_TAB)))
 				{
 					pets.put(entry.name, id);
 				}
+				if (entry.tabs != null)
+				{
+					tabs.put(entry.name, entry.tabs);
+				}
 			});
 			this.petIdByName = Collections.unmodifiableMap(pets);
+			this.tabsByItemName = Collections.unmodifiableMap(tabs);
 		}
 	}
 
@@ -388,14 +465,17 @@ public class RarityResolver
 		private final double[] compositeScores;
 		private final double[] completionScores;
 		private final double[] positivePricedValueScores;
+		private final double[] dropRateScores;
 		private final double logPriceMin;
 		private final double logPriceMax;
 
-		private Dataset(double[] compositeScores, double[] completionScores, double[] positivePricedValueScores, double logPriceMin, double logPriceMax)
+		private Dataset(double[] compositeScores, double[] completionScores, double[] positivePricedValueScores,
+			double[] dropRateScores, double logPriceMin, double logPriceMax)
 		{
 			this.compositeScores = compositeScores;
 			this.completionScores = completionScores;
 			this.positivePricedValueScores = positivePricedValueScores;
+			this.dropRateScores = dropRateScores;
 			this.logPriceMin = logPriceMin;
 			this.logPriceMax = logPriceMax;
 		}

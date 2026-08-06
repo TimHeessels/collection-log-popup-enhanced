@@ -26,7 +26,6 @@ import java.util.Deque;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -575,17 +574,19 @@ public class CollectionLogOverlay extends Overlay
 				{
 					return new Stat("Drop rate: ", List.of(formatFraction(item.getDropProbability())), PRICE_VALUE_COLOR);
 				}
-				// No single known rate - if it's a drop from exactly 2 tracked sources, show both
-				// instead of hiding the stat; more than that doesn't fit, so fall through to Value.
+				// No single known rate - show the rarest-to-most-common range across every tracked
+				// source instead of hiding the stat, regardless of how many sources there are.
 				List<DropRateResolver.SourceRate> ambiguous = item.getAmbiguousDropRates();
-				if (ambiguous.size() != 2)
+				if (ambiguous.isEmpty())
 				{
 					return null;
 				}
-				List<String> ambiguousLines = ambiguous.stream()
-					.map(rate -> formatFraction(rate.getProbability()))
-					.collect(Collectors.toList());
-				return new Stat("Drop rate: ", ambiguousLines, PRICE_VALUE_COLOR);
+				double minProbability = ambiguous.stream().mapToDouble(DropRateResolver.SourceRate::getProbability).min().getAsDouble();
+				double maxProbability = ambiguous.stream().mapToDouble(DropRateResolver.SourceRate::getProbability).max().getAsDouble();
+				String rangeText = minProbability == maxProbability
+					? formatFraction(minProbability)
+					: formatFraction(minProbability) + " - " + formatFraction(maxProbability);
+				return new Stat("Drop rate: ", List.of(rangeText), PRICE_VALUE_COLOR);
 			case NONE:
 			default:
 				return null;
@@ -594,7 +595,18 @@ public class CollectionLogOverlay extends Overlay
 
 	private static String formatFraction(double dropProbability)
 	{
-		return "1/" + Math.round(1 / dropProbability);
+		return "1/" + formatDenominator(Math.round(1 / dropProbability));
+	}
+
+	// Panel width doesn't fit long denominators (e.g. "1/313168") without clipping, so anything at or
+	// above 10k is truncated to the nearest thousand - approximate rarity is all this stat is for.
+	private static String formatDenominator(long denominator)
+	{
+		if (denominator < 10_000)
+		{
+			return Long.toString(denominator);
+		}
+		return (denominator / 1000) + "k";
 	}
 
 	private static Color tierColor(RarityTier tier)

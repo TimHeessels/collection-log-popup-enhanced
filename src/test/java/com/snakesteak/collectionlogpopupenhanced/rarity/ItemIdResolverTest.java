@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.gson.Gson;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -107,7 +108,8 @@ public class ItemIdResolverTest
 		CollectionLogPopupEnhancedConfig config = new CollectionLogPopupEnhancedConfig()
 		{
 		};
-		RarityResolver rarityResolver = new RarityResolver(itemManager, config);
+		DropRateResolver dropRateResolver = mock(DropRateResolver.class);
+		RarityResolver rarityResolver = new RarityResolver(itemManager, config, dropRateResolver);
 		rarityResolver.reload(loadFixture());
 		resolver = new ItemIdResolver(client, itemManager, rarityResolver);
 

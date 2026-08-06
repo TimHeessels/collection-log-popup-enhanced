@@ -435,10 +435,14 @@
 	},
 	"Blood-starved venator": {
 		"Blood shard": 0.19999999999999996,
+		"Dragon spear": 4.193249128814358e-06,
 		"Dust battlestaff": 0.006535947712418277,
 		"Eternal gem": 0.001865671641791078,
 		"Imbued heart": 0.001865671641791078,
-		"Mist battlestaff": 0.006535947712418277
+		"Mist battlestaff": 0.006535947712418277,
+		"Shield left half": 5.590996259519088e-06,
+		"Venator fang": 0.1518919830202602,
+		"Venator tooth": 0.1518919830202602
 	},
 	"Bloodthirsty Hydra": {
 		"Dragon spear": 1.2874529541684332e-05,
@@ -464,6 +468,13 @@
 	},
 	"Blurite rocks": {
 		"Rock golem": 1.3488905374892113e-06
+	},
+	"Boat fishing spot (big net, harpoon)": {
+		"Big shark": 0.00019999999999997797,
+		"Heron": 8.715151378346775e-07
+	},
+	"Boat fishing spot (small net, bait)": {
+		"Heron": 1.149022469171257e-06
 	},
 	"Body Golem": {
 		"Barronite guard": 0.0040000000000000036
@@ -1700,6 +1711,9 @@
 	"Gold rocks": {
 		"Rock golem": 3.38249222031628e-06
 	},
+	"Golem crafting": {
+		"Jeweller's chisel": 0.0031746031746031633
+	},
 	"Gorad": {
 		"Curved bone": 0.00019950124688283832,
 		"Long bone": 0.0024999999999999467
@@ -2318,6 +2332,14 @@
 		"Eclipse moon chestplate": 0.004464285714285698,
 		"Eclipse moon helm": 0.004464285714285698,
 		"Eclipse moon tassets": 0.004464285714285698
+	},
+	"Mad Angel": {
+		"Aggy": 0.0004999999999999449,
+		"Ardeaglais teleport": 0.040000000000000036,
+		"Dragon spear": 3.70025698285259e-05,
+		"Hallowfell": 0.0078125,
+		"Jar of light": 0.0010000000000000009,
+		"Shield left half": 4.933674151541556e-05
 	},
 	"Maggot King": {
 		"Crimson kisten": 0.0019230769230769162,
@@ -4533,7 +4555,7 @@
 	"Sulphur Nagua": {
 		"Dragon spear": 8.583050389532332e-06,
 		"Shield left half": 1.144405883679589e-05,
-		"Sulphur blades": 0.0040000000000000036
+		"Sulphur blades": 0.0022222222222222365
 	},
 	"Suqah": {
 		"Curved bone": 0.00019950124688283832,
@@ -4819,9 +4841,9 @@
 		"Greenman mask": 0.0020000000000000018
 	},
 	"Vampyre kraken": {
-		"Bottled storm": 0.0033333333333332993,
+		"Bottled storm": 0.0028571428571428914,
 		"Dragon cannonball": 0.01666666666666672,
-		"Dragon metal sheet": 0.00666666666666671,
+		"Dragon metal sheet": 0.012499999999999956,
 		"Dragon spear": 1.5258789062277955e-06,
 		"Inky paint": 0.0006666666666667043,
 		"Shield left half": 2.0345052083037274e-06
@@ -5022,6 +5044,9 @@
 		"Dragon sword": 9.999999999998899e-05,
 		"Dragon thrownaxe": 9.999999999998899e-05,
 		"Shield left half": 3.212376644690096e-06
+	},
+	"Wyrmscraig Goat": {
+		"Mr mcgroot": 2.928571428573168e-05
 	},
 	"Yadviga": {
 		"Dragon spear": 3.5762786820825454e-07,

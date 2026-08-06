@@ -20,7 +20,7 @@ If you'd like to test the visuals of the plugin you can do so with:
 <p> E.G '::clogtest 5' would show 5 random unlocks in a row </p>
 <p> OR </p>
 <p> ::clogtest NAME </p>
-<p> E.G '::clogtest basilisk' jaw would show that specific item. </p>
+<p> E.G '::clogtest basilisk jaw' would show that specific item. </p>
 
 Note: This doesn't actually unlock the clog ;) It's just for testing.
 

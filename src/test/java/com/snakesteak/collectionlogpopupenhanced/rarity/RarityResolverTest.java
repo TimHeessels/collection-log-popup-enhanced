@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.gson.Gson;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -14,6 +15,7 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +33,7 @@ public class RarityResolverTest
 	private static final String FIXTURE = "/local-only/collection-log.json";
 
 	private ItemManager itemManager;
+	private DropRateResolver dropRateResolver;
 	private RarityResolver resolver;
 
 	@Before
@@ -41,10 +44,14 @@ public class RarityResolverTest
 		// high alch fallback was added. Individual tests override this per-id where needed.
 		ItemComposition defaultComposition = mock(ItemComposition.class);
 		when(itemManager.getItemComposition(anyInt())).thenReturn(defaultComposition);
+		// Default: no drop-rate data for any item, so unstubbed items behave as before the drop-rate
+		// fallback was added. Individual tests override this per-name where needed.
+		dropRateResolver = mock(DropRateResolver.class);
+		when(dropRateResolver.dropProbabilityByItemName(anyString())).thenReturn(null);
 		CollectionLogPopupEnhancedConfig config = new CollectionLogPopupEnhancedConfig()
 		{
 		};
-		resolver = new RarityResolver(itemManager, config);
+		resolver = new RarityResolver(itemManager, config, dropRateResolver);
 		resolver.reload(loadFixture());
 	}
 
@@ -138,10 +145,35 @@ public class RarityResolverTest
 	// itemId -1 with completely unstubbed (all-zero) prices means there's no usable price signal
 	// anywhere in the dataset - this must not be reported as VERY_RARE (that was the actual bug:
 	// a fully degenerate/all-tied value-score distribution used to rank as the 100th percentile).
+	// The item name isn't in the drop-rate mock either, so there's genuinely nothing to rank against.
 	@Test
 	public void noUsablePriceSignalAnywhereDefaultsToCommonInsteadOfFalseVeryRare()
 	{
 		RarityResult result = resolver.resolve(-1, "Some untradeable unresolved item");
+		assertEquals(RarityTier.COMMON, result.getTier());
+	}
+
+	// Reported live: a brand-new boss-exclusive drop (e.g. "Crimson kisten") has no wiki completion
+	// score yet AND no GE/alch price (untradeable), so both existing fallback signals are empty -
+	// it used to always resolve as COMMON regardless of how rare it actually is. Drop probability is
+	// the last resort: a very low per-kill rate should still rank as rare.
+	@Test
+	public void fallsBackToDropRateWhenNoCompletionAndNoPriceAreAvailable()
+	{
+		when(dropRateResolver.dropProbabilityByItemName("Crimson kisten")).thenReturn(0.0019230769230769162);
+
+		RarityResult result = resolver.resolve(-1, "Crimson kisten");
+		assertEquals(0, result.getPrice());
+		assertEquals(RarityTier.VERY_RARE, result.getTier());
+	}
+
+	// If the item genuinely isn't in the drop-rate dataset either (mock default: null for every
+	// name), there's still truly nothing to rank against, so it must keep defaulting to COMMON
+	// rather than erroring or fabricating a score.
+	@Test
+	public void unknownItemWithNoDropRateEitherStillDefaultsToCommon()
+	{
+		RarityResult result = resolver.resolve(-1, "Some item with genuinely no data anywhere");
 		assertEquals(RarityTier.COMMON, result.getTier());
 	}
 

@@ -215,7 +215,8 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			// Read now, right before display, rather than when the chat message first arrived -
 			// resolution can be deferred by a tick or more (see ItemIdResolver).
-			KillCountTracker.RecentKill kill = killCountTracker.recentKill();
+			List<String> candidateSources = rarityResolver.tabsForItemName(itemName);
+			KillCountTracker.RecentKill kill = killCountTracker.killCountFor(candidateSources);
 
 			killCount = kill != null ? kill.getKillCount() : null;
 			source = kill != null ? kill.getSource() : null;

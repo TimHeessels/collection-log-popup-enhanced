@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.CommandExecuted;
+import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -70,6 +71,11 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Inject
 	private CollectionLogOverlay collectionLogOverlay;
 
+	@Inject
+	private CollectionLogPopupEnhancedConfig config;
+
+	private boolean previousPreviewMode;
+
 	@Override
 	protected void startUp() throws Exception
 	{
@@ -89,6 +95,37 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
 		log.debug("Collection Log Popup Enhanced stopped!");
+	}
+
+	@Subscribe
+	public void onGameTick(GameTick gameTick)
+	{
+		boolean previewMode = config.previewMode();
+		if (previewMode && !previousPreviewMode)
+		{
+			// Just turned on - dismiss whatever's currently showing/queued (e.g. a real unlock still
+			// mid-animation) so the held preview item starts from a clean slate.
+			collectionLogOverlay.clear();
+		}
+		else if (!previewMode && previousPreviewMode)
+		{
+			// Just turned off - the previously held item has a stale notificationStartMillis from
+			// whenever it first appeared, so its normal hold/fade timer (see CollectionLogOverlay#advance)
+			// would resume from an unpredictable point. Clearing it outright is simpler and less jarring
+			// than trying to resume that timer correctly.
+			collectionLogOverlay.clear();
+		}
+		previousPreviewMode = previewMode;
+
+		// Triggers a random item as soon as preview mode is enabled (the overlay starts idle); the
+		// overlay then holds it on screen indefinitely instead of fading it out (see
+		// CollectionLogOverlay#advance), so this doesn't re-fire again until preview mode is toggled
+		// off and back on. Same test pipeline as the "::clogtest" dev command, just driven by the
+		// config toggle instead of a chat command so any user can preview.
+		if (previewMode && collectionLogOverlay.isIdle())
+		{
+			testRandomDatasetItems(1);
+		}
 	}
 
 	@Subscribe

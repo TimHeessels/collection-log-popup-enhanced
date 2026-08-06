@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced;
 
 import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
+import com.snakesteak.collectionlogpopupenhanced.overlay.TextRenderMode;
 import com.snakesteak.collectionlogpopupenhanced.overlay.ValueDisplayMode;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityBasis;
 import net.runelite.client.config.Config;
@@ -33,6 +34,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		position = 2
 	)
 	String audioSection = "audioSection";
+
+	@ConfigSection(
+		name = "Appearance",
+		description = "Tune to your liking",
+		position = 3
+	)
+	String appearanceSection = "appearanceSection";
 
 	@ConfigItem(
 		keyName = "rarityBasis",
@@ -164,6 +172,40 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	default int soundVolume()
 	{
-		return 75;
+		return 65;
+	}
+
+	@Range(min = 50, max = 200)
+	@ConfigItem(
+		keyName = "overlayScalePercent",
+		name = "Popup scale (%)",
+		description = "Size of the popup",
+		section = appearanceSection
+	)
+	default int overlayScalePercent()
+	{
+		return 100;
+	}
+
+	@ConfigItem(
+		keyName = "textRenderMode",
+		name = "Text rendering",
+		description = "How popup text is rendered",
+		section = appearanceSection
+	)
+	default TextRenderMode textRenderMode()
+	{
+		return TextRenderMode.CRISP;
+	}
+
+	@ConfigItem(
+		keyName = "previewMode",
+		name = "Preview popup",
+		description = "Shows a test item as long as this toggle is active",
+		section = appearanceSection
+	)
+	default boolean previewMode()
+	{
+		return false;
 	}
 }

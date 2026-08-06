@@ -15,14 +15,9 @@ In settings menu,
 ![alt text](image-3.png)
 
 # Testing
-If you'd like to test the visuals of the plugin you can do so with:
-<p> ::clogtest X </p>
-<p> E.G '::clogtest 5' would show 5 random unlocks in a row </p>
-<p> OR </p>
-<p> ::clogtest NAME </p>
-<p> E.G '::clogtest basilisk jaw' would show that specific item. </p>
-
-Note: This doesn't actually unlock the clog ;) It's just for testing.
+To test the plugin and set the scale of the popup enable the 'preview popup' toggle. This will show the popup as if you got a random item.
+Scale the popup and set text-rendering to what looks good to you. Crisp text looks best at higher scale, smooth at lower.
+![alt text](image-5.png)
 
 # Popup
 The popup will apear on gaining a new collection log slot, and show the icon for the item.
@@ -45,9 +40,19 @@ The popup backgrounds are from:
 https://bdragon1727.itch.io/custom-border-and-panels-menu-all-part
 and customized by me in photoshop.
 
-Sound effects (feel free to change them to your own files):
+Sound effects:
 Common: https://freesound.org/people/Kenneth_Cooney/sounds/609336/
 Uncommon: https://freesound.org/people/PearceWilsonKing/sounds/238855/
 Rare: https://freesound.org/people/jobro/sounds/198808/
 Very rare: https://freesound.org/people/_MC5_/sounds/524848/
 Pet: https://freesound.org/people/Tuudurt/sounds/275104/
+
+## Custom sounds
+Want to use your own sound effects instead? Place any or all '.wav' files into '.runelite/collection-log-popup-enhanced/sounds/', using these exact filenames:
+- `common.wav`
+- `uncommon.wav`
+- `rare.wav`
+- `very_rare.wav`
+- `pet.wav`
+And it will use your sound instead!
+(Note: if it still plays the default sound and the spelling is correct, your audio file is not supported, try another.)

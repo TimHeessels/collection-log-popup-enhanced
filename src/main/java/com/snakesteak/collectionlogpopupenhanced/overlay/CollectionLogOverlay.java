@@ -42,8 +42,8 @@ import net.runelite.client.util.QuantityFormatter;
 public class CollectionLogOverlay extends Overlay
 {
 	// Matches the fixed size of the bundled BackgroundPanel1-4.png background art.
-	private static final int PANEL_WIDTH = 379;
-	private static final int PANEL_HEIGHT = 128;
+	private static final int BASE_PANEL_WIDTH = 379;
+	private static final int BASE_PANEL_HEIGHT = 128;
 
 	// Breathing room above the panel so it doesn't sit flush against the top of the screen. Kept
 	// small so the panel's top edge still clears/covers the native OSRS collection log popup, which
@@ -53,37 +53,34 @@ public class CollectionLogOverlay extends Overlay
 	// The icon slot is horizontally centered and straddles the panel's bottom edge, matching the
 	// bundled IconPanel1-4.png art (89x89), and animates independently of the panel's fold-open
 	// transform.
-	private static final int ICON_CANVAS_SIZE = 89;
-	private static final int ICON_X = (PANEL_WIDTH - ICON_CANVAS_SIZE) / 2;
-	private static final int ICON_Y = PANEL_HEIGHT - ICON_CANVAS_SIZE / 2;
+	private static final int BASE_ICON_CANVAS_SIZE = 89;
 	// Item sprites are a fixed 36x32 - far smaller than the icon slot's usable interior, so scale
 	// the longer side up to this before centering it.
-	private static final int ICON_TARGET_SIZE = 66;
+	private static final int BASE_ICON_TARGET_SIZE = 66;
 	// The sprite art isn't visually centered within its own bounding box, so nudge it right of the
 	// icon frame's true center to compensate.
-	private static final int ICON_SPRITE_X_OFFSET = 3;
+	private static final int BASE_ICON_SPRITE_X_OFFSET = 3;
 
 	// Bottom-left / bottom-right stacked label+value blocks, clear of the icon's horizontal footprint
 	// and below the divider line baked into the (now vertically-flipped) background art at y=70-71.
-	private static final int CORNER_PADDING_X = 16;
-	private static final int CORNER_LABEL_BASELINE_Y = 93;
-	private static final int CORNER_VALUE_BASELINE_Y = 116;
+	private static final int BASE_CORNER_PADDING_X = 16;
+	private static final int BASE_CORNER_LABEL_BASELINE_Y = 93;
+	private static final int BASE_CORNER_VALUE_BASELINE_Y = 116;
 	// Ambiguous Drop rate values (see PanelStat#DROP_RATE) can show up to 2 stacked value lines in a
 	// smaller font so both still fit below the item name, without the second line's descenders
 	// running past the panel's bottom edge.
-	private static final int CORNER_MULTI_VALUE_FIRST_BASELINE_Y = 105;
-	private static final int CORNER_MULTI_VALUE_LINE_HEIGHT = 16;
-	private static final float CORNER_MULTI_VALUE_FONT_SIZE = 14f;
-	private static final int CORNER_TEXT_MAX_WIDTH = ICON_X - CORNER_PADDING_X;
+	private static final int BASE_CORNER_MULTI_VALUE_FIRST_BASELINE_Y = 105;
+	private static final int BASE_CORNER_MULTI_VALUE_LINE_HEIGHT = 16;
+	private static final float BASE_CORNER_MULTI_VALUE_FONT_SIZE = 14f;
 
 	// Item name - centered, below the caption and above the baked-in divider. Baseline is the first
 	// of up to 2 lines, so a wrapped name's second line (see #fitName) still clears the divider.
-	private static final int NAME_BASELINE_Y = 48;
-	private static final int NAME_LINE_HEIGHT = 20;
-	private static final int NAME_SIDE_MARGIN = 16;
+	private static final int BASE_NAME_BASELINE_Y = 48;
+	private static final int BASE_NAME_LINE_HEIGHT = 20;
+	private static final int BASE_NAME_SIDE_MARGIN = 16;
 
 	private static final String CAPTION_TEXT = "Collection log slot";
-	private static final int CAPTION_BASELINE_Y = 22;
+	private static final int BASE_CAPTION_BASELINE_Y = 22;
 
 	private static final Color TITLE_COLOR = new Color(255, 152, 31);
 	private static final Color COMMON_COLOR = new Color(220, 220, 214);
@@ -94,11 +91,11 @@ public class CollectionLogOverlay extends Overlay
 	private static final Color PRICE_LABEL_COLOR = COMMON_COLOR;
 	private static final Color PRICE_VALUE_COLOR = new Color(255, 205, 45);
 
-	private static final float CORNER_LABEL_FONT_SIZE = 16f;
-	private static final float CORNER_VALUE_FONT_SIZE = 19f;
-	private static final float NAME_FONT_SIZE = 27f;
-	private static final float NAME_FONT_MIN_SIZE = 13f;
-	private static final float CAPTION_FONT_SIZE = 16f;
+	private static final float BASE_CORNER_LABEL_FONT_SIZE = 16f;
+	private static final float BASE_CORNER_VALUE_FONT_SIZE = 19f;
+	private static final float BASE_NAME_FONT_SIZE = 27f;
+	private static final float BASE_NAME_FONT_MIN_SIZE = 13f;
+	private static final float BASE_CAPTION_FONT_SIZE = 16f;
 
 	// Fold-open (panel scaleY, pivoted at its top edge) plays first; the icon pop (its own
 	// scale+fade, pivoted at its own center) starts exactly when the fold ends. Hold length is
@@ -117,17 +114,40 @@ public class CollectionLogOverlay extends Overlay
 	private final SoundManager soundManager;
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
-	private final Font cornerLabelFont;
-	private final Font cornerValueFont;
-	private final Font cornerMultiValueFont;
-	private final Font nameFont;
-	private final Font captionFont;
 
 	// Only ever written/read from the client thread, so no synchronization is needed.
 	private final Deque<PendingItem> queue = new ArrayDeque<>();
 
 	private PendingItem current;
 	private long notificationStartMillis;
+
+	// Scaled layout/font state, recomputed by #applyScale only when config.overlayScalePercent()
+	// changes (rather than every frame) since Font#deriveFont isn't free to call 50x/sec for nothing.
+	private int lastScalePercent = -1;
+	private boolean textOutlineEnabled;
+	private int panelWidth;
+	private int panelHeight;
+	private int iconCanvasSize;
+	private int iconX;
+	private int iconY;
+	private int iconTargetSize;
+	private int iconSpriteXOffset;
+	private int cornerPaddingX;
+	private int cornerLabelBaselineY;
+	private int cornerValueBaselineY;
+	private int cornerMultiValueFirstBaselineY;
+	private int cornerMultiValueLineHeight;
+	private int cornerTextMaxWidth;
+	private int nameBaselineY;
+	private int nameLineHeight;
+	private int nameSideMargin;
+	private int captionBaselineY;
+	private float nameFontMinSize;
+	private Font cornerLabelFont;
+	private Font cornerValueFont;
+	private Font cornerMultiValueFont;
+	private Font nameFont;
+	private Font captionFont;
 
 	@Inject
 	public CollectionLogOverlay(Client client, ItemManager itemManager, CollectionLogPopupEnhancedConfig config, SoundManager soundManager)
@@ -159,12 +179,47 @@ public class CollectionLogOverlay extends Overlay
 		iconFrames.put(RarityTier.VERY_RARE, loadImage("Icons/IconPanel4.png"));
 		iconFrames.put(RarityTier.PET, loadImage("Icons/IconPanelPet.png"));
 
+		applyScale(config.overlayScalePercent());
+	}
 
-		cornerLabelFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_LABEL_FONT_SIZE);
-		cornerValueFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_VALUE_FONT_SIZE);
-		cornerMultiValueFont = FontManager.getRunescapeBoldFont().deriveFont(CORNER_MULTI_VALUE_FONT_SIZE);
-		nameFont = FontManager.getRunescapeBoldFont().deriveFont(NAME_FONT_SIZE);
-		captionFont = FontManager.getRunescapeBoldFont().deriveFont(CAPTION_FONT_SIZE);
+	/**
+	 * Recomputes every scaled layout constant and re-derives each font at its scaled point size, so
+	 * text is rasterized natively at the target size rather than blurred by stretching a fixed-size
+	 * raster. Cheap, but only worth doing when the configured scale actually changes (see #render).
+	 */
+	private void applyScale(int scalePercent)
+	{
+		float scale = scalePercent / 100f;
+
+		panelWidth = Math.round(BASE_PANEL_WIDTH * scale);
+		panelHeight = Math.round(BASE_PANEL_HEIGHT * scale);
+		iconCanvasSize = Math.round(BASE_ICON_CANVAS_SIZE * scale);
+		iconX = (panelWidth - iconCanvasSize) / 2;
+		iconY = panelHeight - iconCanvasSize / 2;
+		iconTargetSize = Math.round(BASE_ICON_TARGET_SIZE * scale);
+		iconSpriteXOffset = Math.round(BASE_ICON_SPRITE_X_OFFSET * scale);
+
+		cornerPaddingX = Math.round(BASE_CORNER_PADDING_X * scale);
+		cornerLabelBaselineY = Math.round(BASE_CORNER_LABEL_BASELINE_Y * scale);
+		cornerValueBaselineY = Math.round(BASE_CORNER_VALUE_BASELINE_Y * scale);
+		cornerMultiValueFirstBaselineY = Math.round(BASE_CORNER_MULTI_VALUE_FIRST_BASELINE_Y * scale);
+		cornerMultiValueLineHeight = Math.round(BASE_CORNER_MULTI_VALUE_LINE_HEIGHT * scale);
+		cornerTextMaxWidth = iconX - cornerPaddingX;
+
+		nameBaselineY = Math.round(BASE_NAME_BASELINE_Y * scale);
+		nameLineHeight = Math.round(BASE_NAME_LINE_HEIGHT * scale);
+		nameSideMargin = Math.round(BASE_NAME_SIDE_MARGIN * scale);
+		nameFontMinSize = BASE_NAME_FONT_MIN_SIZE * scale;
+
+		captionBaselineY = Math.round(BASE_CAPTION_BASELINE_Y * scale);
+
+		cornerLabelFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CORNER_LABEL_FONT_SIZE * scale);
+		cornerValueFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CORNER_VALUE_FONT_SIZE * scale);
+		cornerMultiValueFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CORNER_MULTI_VALUE_FONT_SIZE * scale);
+		nameFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_NAME_FONT_SIZE * scale);
+		captionFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CAPTION_FONT_SIZE * scale);
+
+		lastScalePercent = scalePercent;
 	}
 
 	private static BufferedImage loadImage(String resourceName)
@@ -195,40 +250,96 @@ public class CollectionLogOverlay extends Overlay
 		current = null;
 	}
 
+	/**
+	 * @return true if nothing is currently showing or queued - used to drive the preview mode loop
+	 *         (see CollectionLogPopupEnhancedPlugin#onGameTick), which re-triggers a new random item
+	 *         each time the previous one finishes.
+	 */
+	public boolean isIdle()
+	{
+		return current == null && queue.isEmpty();
+	}
+
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
 		long now = System.currentTimeMillis();
 		advance(now);
 
+		int scalePercent = config.overlayScalePercent();
+		if (scalePercent != lastScalePercent)
+		{
+			applyScale(scalePercent);
+		}
+
 		// TOP_CENTER's own snap-corner centering is relative to the HUD container widget, not the
 		// full client canvas, so it doesn't line up with the native (canvas-centered) collection log
 		// popup we're overlapping. Overriding the preferred location with an absolute canvas position
-		// bypasses that and centers this panel on the real client width instead, every frame - both in
-		// fixed/classic and resizable/modern layouts.
-		Dimension realDimensions = client.getRealDimensions();
-		setPreferredLocation(new Point((realDimensions.width - PANEL_WIDTH) / 2, TOP_MARGIN));
+		// bypasses that and centers this panel over the game viewport instead, every frame. In
+		// resizable/modern layout the viewport spans the full client width, but in fixed/classic layout
+		// it's a fixed-size area offset left of the sidebar, so it must be centered on the viewport rect
+		// there rather than the full client width (which would skew the panel toward the sidebar).
+		int viewportCenterX;
+		if (client.isResized())
+		{
+			viewportCenterX = client.getRealDimensions().width / 2;
+		}
+		else
+		{
+			viewportCenterX = client.getViewportXOffset() + (client.getViewportWidth() / 2);
+		}
+		setPreferredLocation(new Point(viewportCenterX - (panelWidth / 2), TOP_MARGIN));
 
 		if (current == null)
 		{
 			// Report the panel's real width instead of 0 - RuneLite's positioning centers each frame
 			// using the *previous* frame's bounds, so returning 0 here would make the panel jump left
 			// once its real width is reported on the next frame it's shown.
-			return new Dimension(PANEL_WIDTH, 0);
+			return new Dimension(panelWidth, 0);
 		}
 
 		long elapsed = now - notificationStartMillis;
-		long holdMillis = config.overlayDisplaySeconds() * 1000L;
 		long iconPopStart = FOLD_MILLIS;
-		long holdStart = iconPopStart + ICON_POP_MILLIS;
-		long fadeStart = holdStart + holdMillis;
 
 		float foldRaw = clamp01(elapsed / (float) FOLD_MILLIS);
 		float foldT = easeOutBack(foldRaw, FOLD_OVERSHOOT);
-		float fadeAlpha = elapsed < fadeStart ? 1f : 1f - easeInCubic(clamp01((elapsed - fadeStart) / (float) FADE_MILLIS));
+		// Preview mode holds the item on screen indefinitely (see #advance) instead of fading it out
+		// on the usual timer, so users can freely tweak scale/text settings without it disappearing.
+		float fadeAlpha;
+		if (config.previewMode())
+		{
+			fadeAlpha = 1f;
+		}
+		else
+		{
+			long holdStart = iconPopStart + ICON_POP_MILLIS;
+			long fadeStart = holdStart + config.overlayDisplaySeconds() * 1000L;
+			fadeAlpha = elapsed < fadeStart ? 1f : 1f - easeInCubic(clamp01((elapsed - fadeStart) / (float) FADE_MILLIS));
+		}
 
-		graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
-		graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+		// Which rendering hints look sharpest depends on the user's own display/OS scaling, which isn't
+		// predictable from the popup's own scale percentage - so this is a manual config choice (see
+		// TextRenderMode) rather than something inferred automatically.
+		TextRenderMode textRenderMode = config.textRenderMode();
+		textOutlineEnabled = textRenderMode == TextRenderMode.SMOOTH_OUTLINED;
+		if (textRenderMode == TextRenderMode.CRISP)
+		{
+			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+			graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
+			graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_DEFAULT);
+		}
+		else
+		{
+			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+			graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+			// The bundled runescape_bold.ttf is hand-hinted to snap to the pixel grid at its native
+			// integer point sizes (e.g. our 16f caption/corner-label sizes coincide with it exactly at
+			// 100% popup scale), which defeats antialiasing regardless of the AA hint above - it only
+			// controls whether the already-hinted/snapped outline gets antialiased, not whether hinting
+			// happens. STROKE_PURE renders the unhinted outline instead, so smoothing is consistent
+			// across every text size rather than only at scales that happen to avoid that coincidence.
+			graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+		}
 
 		// graphics is already translated to the panel's absolute position (see preferredLocation
 		// above) - capture that as the base transform both animated pieces reset back to between draws.
@@ -238,23 +349,23 @@ public class CollectionLogOverlay extends Overlay
 		// --- panel: scaleY-only fold, pivoted at its own center, plus whatever's left of the
 		// fade-out alpha. Corner stats/name/caption are drawn here too so they reveal progressively
 		// as the fold grows outward from the middle.
-		graphics.translate(PANEL_WIDTH / 2.0, PANEL_HEIGHT / 2.0);
+		graphics.translate(panelWidth / 2.0, panelHeight / 2.0);
 		graphics.scale(1.0, foldT);
-		graphics.translate(-PANEL_WIDTH / 2.0, -PANEL_HEIGHT / 2.0);
+		graphics.translate(-panelWidth / 2.0, -panelHeight / 2.0);
 
 		Shape originalClip = graphics.getClip();
 		if (foldRaw < 1f)
 		{
 			// Still folding - clip to the panel's own (already scaled) bounds so nothing draws
 			// past where the fold has actually reached yet.
-			graphics.clip(new Rectangle2D.Float(0, 0, PANEL_WIDTH, PANEL_HEIGHT));
+			graphics.clip(new Rectangle2D.Float(0, 0, panelWidth, panelHeight));
 		}
 		if (fadeAlpha < 1f)
 		{
 			graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, fadeAlpha));
 		}
 
-		graphics.drawImage(backgrounds.get(current.getTier()), 0, 0, null);
+		graphics.drawImage(backgrounds.get(current.getTier()), 0, 0, panelWidth, panelHeight, null);
 		drawPanelContent(graphics);
 
 		graphics.setClip(originalClip);
@@ -272,8 +383,8 @@ public class CollectionLogOverlay extends Overlay
 			float iconScale = ICON_MIN_SCALE + (1f - ICON_MIN_SCALE) * iconEase;
 			float iconAlpha = clamp01(iconEase) * fadeAlpha;
 
-			float iconCenterX = ICON_X + ICON_CANVAS_SIZE / 2f;
-			float iconCenterY = ICON_Y + ICON_CANVAS_SIZE / 2f;
+			float iconCenterX = iconX + iconCanvasSize / 2f;
+			float iconCenterY = iconY + iconCanvasSize / 2f;
 			graphics.translate(iconCenterX, iconCenterY);
 			graphics.scale(iconScale, iconScale);
 			graphics.translate(-iconCenterX, -iconCenterY);
@@ -282,27 +393,27 @@ public class CollectionLogOverlay extends Overlay
 			{
 				graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, iconAlpha)));
 			}
-			graphics.drawImage(iconFrames.get(current.getTier()), ICON_X, ICON_Y, null);
+			graphics.drawImage(iconFrames.get(current.getTier()), iconX, iconY, iconCanvasSize, iconCanvasSize, null);
 			drawItemSprite(graphics);
 			graphics.setComposite(originalComposite);
 			graphics.setTransform(base);
 		}
 
 		// Height includes the icon frame's bottom half, which now straddles the panel's bottom edge.
-		return new Dimension(PANEL_WIDTH, PANEL_HEIGHT + ICON_CANVAS_SIZE / 2);
+		return new Dimension(panelWidth, panelHeight + iconCanvasSize / 2);
 	}
 
 	private void drawItemSprite(Graphics2D graphics)
 	{
 		BufferedImage sprite = itemManager.getImage(current.getItemId());
-		float spriteScale = ICON_TARGET_SIZE / (float) Math.max(sprite.getWidth(), sprite.getHeight());
+		float spriteScale = iconTargetSize / (float) Math.max(sprite.getWidth(), sprite.getHeight());
 		int scaledWidth = Math.round(sprite.getWidth() * spriteScale);
 		int scaledHeight = Math.round(sprite.getHeight() * spriteScale);
 		Object originalInterpolation = graphics.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
 		graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
 		graphics.drawImage(sprite,
-			ICON_X + ICON_SPRITE_X_OFFSET + (ICON_CANVAS_SIZE - scaledWidth) / 2,
-			ICON_Y + (ICON_CANVAS_SIZE - scaledHeight) / 2,
+			iconX + iconSpriteXOffset + (iconCanvasSize - scaledWidth) / 2,
+			iconY + (iconCanvasSize - scaledHeight) / 2,
 			scaledWidth, scaledHeight,
 			null);
 		if (originalInterpolation != null)
@@ -311,25 +422,39 @@ public class CollectionLogOverlay extends Overlay
 		}
 	}
 
+	/**
+	 * Draws {@code text} in {@code color}, preceded by a 1px black drop shadow when
+	 * {@link #textOutlineEnabled} (set from {@link TextRenderMode#SMOOTH_OUTLINED} - see #render).
+	 */
+	private void drawOutlinedString(Graphics2D graphics, String text, int x, int y, Color color)
+	{
+		if (textOutlineEnabled)
+		{
+			graphics.setColor(Color.BLACK);
+			graphics.drawString(text, x + 1, y + 1);
+		}
+		graphics.setColor(color);
+		graphics.drawString(text, x, y);
+	}
+
 	private void drawPanelContent(Graphics2D graphics)
 	{
 		// Drawn top-to-bottom to match the fold-open reveal (see #render), which clips progressively
 		// from the panel's top edge downward: caption, then name, then the bottom corner stats.
 		graphics.setFont(captionFont);
-		graphics.setColor(TITLE_COLOR);
-		int captionX = (PANEL_WIDTH - graphics.getFontMetrics().stringWidth(CAPTION_TEXT)) / 2;
-		graphics.drawString(CAPTION_TEXT, captionX, CAPTION_BASELINE_Y);
+		int captionX = (panelWidth - graphics.getFontMetrics().stringWidth(CAPTION_TEXT)) / 2;
+		drawOutlinedString(graphics, CAPTION_TEXT, captionX, captionBaselineY, TITLE_COLOR);
 
-		int maxNameWidth = PANEL_WIDTH - 2 * NAME_SIDE_MARGIN;
-		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth);
-		graphics.setColor(tierColor(current.getTier()));
-		int nameY = NAME_BASELINE_Y;
+		int maxNameWidth = panelWidth - 2 * nameSideMargin;
+		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth, nameFontMinSize);
+		Color nameColor = tierColor(current.getTier());
+		int nameY = nameBaselineY;
 		for (String line : fittedName.getLines())
 		{
 			graphics.setFont(fittedName.getFont());
-			int lineX = (PANEL_WIDTH - graphics.getFontMetrics().stringWidth(line)) / 2;
-			graphics.drawString(line, lineX, nameY);
-			nameY += NAME_LINE_HEIGHT;
+			int lineX = (panelWidth - graphics.getFontMetrics().stringWidth(line)) / 2;
+			drawOutlinedString(graphics, line, lineX, nameY, nameColor);
+			nameY += nameLineHeight;
 		}
 
 		FontMetrics cornerLabelMetrics = graphics.getFontMetrics(cornerLabelFont);
@@ -338,7 +463,7 @@ public class CollectionLogOverlay extends Overlay
 		Stat leftStat = resolveStatWithFallback(config.leftPanelStat().toPanelStat(), current);
 		if (leftStat != null)
 		{
-			drawCornerStat(graphics, leftStat, CORNER_PADDING_X, false, cornerLabelMetrics, cornerValueMetrics);
+			drawCornerStat(graphics, leftStat, cornerPaddingX, false, cornerLabelMetrics, cornerValueMetrics);
 		}
 
 		Stat rightStat = resolveStatWithFallback(config.rightPanelStat().toPanelStat(), current);
@@ -346,7 +471,7 @@ public class CollectionLogOverlay extends Overlay
 		{
 			// Right corner: label and each value line are independently right-aligned to the panel
 			// edge, since the label is usually much shorter than the value.
-			drawCornerStat(graphics, rightStat, PANEL_WIDTH - CORNER_PADDING_X, true, cornerLabelMetrics, cornerValueMetrics);
+			drawCornerStat(graphics, rightStat, panelWidth - cornerPaddingX, true, cornerLabelMetrics, cornerValueMetrics);
 		}
 	}
 
@@ -357,25 +482,23 @@ public class CollectionLogOverlay extends Overlay
 	private void drawCornerStat(Graphics2D graphics, Stat stat, int edgeX, boolean rightAligned, FontMetrics labelMetrics, FontMetrics valueMetrics)
 	{
 		graphics.setFont(labelMetrics.getFont());
-		graphics.setColor(PRICE_LABEL_COLOR);
-		graphics.drawString(stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, CORNER_LABEL_BASELINE_Y);
+		drawOutlinedString(graphics, stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, cornerLabelBaselineY, PRICE_LABEL_COLOR);
 
 		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
 		// a smaller font and tighter line spacing so both still fit above the item name.
 		boolean multiLine = stat.getValueLines().size() > 1;
 		Font valueFont = multiLine ? cornerMultiValueFont : valueMetrics.getFont();
 		FontMetrics activeValueMetrics = multiLine ? graphics.getFontMetrics(valueFont) : valueMetrics;
-		int lineHeight = multiLine ? CORNER_MULTI_VALUE_LINE_HEIGHT : 0;
+		int lineHeight = multiLine ? cornerMultiValueLineHeight : 0;
 
 		graphics.setFont(valueFont);
-		graphics.setColor(stat.getValueColor());
-		int valueY = multiLine ? CORNER_MULTI_VALUE_FIRST_BASELINE_Y : CORNER_VALUE_BASELINE_Y;
+		int valueY = multiLine ? cornerMultiValueFirstBaselineY : cornerValueBaselineY;
 		for (String rawLine : stat.getValueLines())
 		{
 			// Only the multi-line case bothers truncating - a fraction's denominator has no
 			// natural length cap, unlike the usual single-line stats.
-			String line = multiLine ? truncate(graphics, rawLine, valueFont, CORNER_TEXT_MAX_WIDTH) : rawLine;
-			graphics.drawString(line, rightAligned ? edgeX - activeValueMetrics.stringWidth(line) : edgeX, valueY);
+			String line = multiLine ? truncate(graphics, rawLine, valueFont, cornerTextMaxWidth) : rawLine;
+			drawOutlinedString(graphics, line, rightAligned ? edgeX - activeValueMetrics.stringWidth(line) : edgeX, valueY, stat.getValueColor());
 			valueY += lineHeight;
 		}
 	}
@@ -395,6 +518,12 @@ public class CollectionLogOverlay extends Overlay
 					soundManager.play(current.getTier());
 				}
 			}
+			return;
+		}
+
+		if (config.previewMode())
+		{
+			// Held indefinitely - see the fadeAlpha branch in #render.
 			return;
 		}
 
@@ -427,10 +556,10 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * Wraps the item name onto up to 2 lines, shrinking the font (down to {@link #NAME_FONT_MIN_SIZE})
-	 * if it still doesn't fit. Any overflow left after that is truncated with an ellipsis.
+	 * Wraps the item name onto up to 2 lines, shrinking the font (down to {@code minFontSize}) if it
+	 * still doesn't fit. Any overflow left after that is truncated with an ellipsis.
 	 */
-	private static FittedName fitName(Graphics2D graphics, String text, Font baseFont, int maxWidth)
+	private static FittedName fitName(Graphics2D graphics, String text, Font baseFont, int maxWidth, float minFontSize)
 	{
 		Font font = baseFont;
 		List<String> lines;
@@ -445,7 +574,7 @@ public class CollectionLogOverlay extends Overlay
 
 			lines = wrapToTwoLines(metrics, text, maxWidth);
 			boolean secondLineFits = lines.size() < 2 || metrics.stringWidth(lines.get(1)) <= maxWidth;
-			if (secondLineFits || font.getSize2D() <= NAME_FONT_MIN_SIZE)
+			if (secondLineFits || font.getSize2D() <= minFontSize)
 			{
 				break;
 			}
@@ -554,7 +683,7 @@ public class CollectionLogOverlay extends Overlay
 				boolean showAlch = config.valueDisplayMode() == ValueDisplayMode.HIGH_ALCH;
 				int displayPrice = showAlch ? item.getAlchPrice() : item.getPrice();
 				boolean displayHighAlch = showAlch || item.isHighAlch();
-				String valueText = QuantityFormatter.formatNumber(displayPrice) + " gp" + (displayHighAlch ? " (HA)" : "");
+				String valueText = formatValue(displayPrice) + " gp" + (displayHighAlch ? " (HA)" : "");
 				return new Stat("Value: ", List.of(valueText), PRICE_VALUE_COLOR);
 			case RARITY:
 				if (item.getCompPercent() == null)
@@ -607,6 +736,30 @@ public class CollectionLogOverlay extends Overlay
 			return Long.toString(denominator);
 		}
 		return (denominator / 1000) + "k";
+	}
+
+	// Long gp values (e.g. "2,147,483,647 gp") don't fit the panel either, so truncate to one decimal
+	// of K/M/B once the value hits 100k+ - below that the plain number is short enough to fit as-is.
+	private static String formatValue(int value)
+	{
+		long absValue = Math.abs((long) value);
+		String sign = value < 0 ? "-" : "";
+		if (absValue < 100_000)
+		{
+			return sign + absValue;
+		}
+		if (absValue < 1_000_000_000L)
+		{
+			return absValue < 1_000_000
+				? sign + oneDecimal(absValue, 1_000) + "k"
+				: sign + oneDecimal(absValue, 1_000_000) + "m";
+		}
+		return sign + oneDecimal(absValue, 1_000_000_000L) + "b";
+	}
+
+	private static String oneDecimal(long value, long unit)
+	{
+		return String.format("%.1f", value / (double) unit);
 	}
 
 	private static Color tierColor(RarityTier tier)

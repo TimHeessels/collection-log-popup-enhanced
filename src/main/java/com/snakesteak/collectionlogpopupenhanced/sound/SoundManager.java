@@ -7,10 +7,6 @@ import java.util.EnumMap;
 import java.util.Map;
 import javax.inject.Inject;
 import javax.inject.Singleton;
-import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioSystem;
-import javax.sound.sampled.Clip;
-import javax.sound.sampled.DataLine;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.RuneLite;
 import net.runelite.client.audio.AudioPlayer;
@@ -69,14 +65,8 @@ public class SoundManager
 			File override = new File(SOUNDS_DIR, filename);
 			if (override.isFile())
 			{
-				if (isPlayableLine(override))
-				{
-					audioPlayer.play(override, gain(config.soundVolume()));
-					return;
-				}
-
-				log.warn("Custom sound {} has an unsupported audio format, falling back to the bundled sound. "
-					+ "Use uncompressed 16-bit PCM .wav", override);
+				audioPlayer.play(override, gain(config.soundVolume()));
+				return;
 			}
 
 			String resource = "/sounds/" + filename;
@@ -91,22 +81,6 @@ public class SoundManager
 		catch (Exception e)
 		{
 			log.warn("Failed to play {} sound", tier, e);
-		}
-	}
-
-	// AudioPlayer opens the file's format directly on a Clip line with no conversion, so formats
-	// the mixer can't open natively (e.g. 32-bit float WAVs) throw LineUnavailableException deep in
-	// javax.sound.sampled instead of failing cleanly - checked upfront to avoid that.
-	private static boolean isPlayableLine(File file)
-	{
-		try
-		{
-			AudioFormat format = AudioSystem.getAudioFileFormat(file).getFormat();
-			return AudioSystem.isLineSupported(new DataLine.Info(Clip.class, format));
-		}
-		catch (Exception e)
-		{
-			return false;
 		}
 	}
 

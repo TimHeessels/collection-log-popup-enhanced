@@ -114,6 +114,60 @@ public class RarityResolver
 	}
 
 	/**
+	 * @param tier which tier to pick from; must not be {@link PreviewTier#NONE} (callers gate on that
+	 *             before ever reaching here)
+	 * @return a random item id matching {@code tier}, or {@code null} if none is available (dataset
+	 *         not loaded yet, or genuinely no item of that tier). {@link PreviewTier#PET} draws from
+	 *         the pet name index directly since pets never enter {@link CompletionData#ids} (see the
+	 *         class javadoc); {@link PreviewTier#RANDOM} reuses {@link #randomItemIds}'s pool with no
+	 *         tier filtering. The remaining tiers scan a shuffled candidate list, calling
+	 *         {@link #resolve} on each until one buckets into the requested tier - same per-item cost
+	 *         as a real unlock, just repeated until a match turns up.
+	 */
+	public Integer randomItemIdForTier(PreviewTier tier)
+	{
+		CompletionData data = completionData;
+
+		if (tier == PreviewTier.PET)
+		{
+			List<Integer> petIds = new ArrayList<>(data.petIdByName.values());
+			if (petIds.isEmpty())
+			{
+				return null;
+			}
+			return petIds.get(ThreadLocalRandom.current().nextInt(petIds.size()));
+		}
+
+		if (data.ids.isEmpty())
+		{
+			return null;
+		}
+
+		List<Integer> shuffled = new ArrayList<>(data.ids);
+		Collections.shuffle(shuffled, ThreadLocalRandom.current());
+
+		if (tier == PreviewTier.RANDOM)
+		{
+			return shuffled.get(0);
+		}
+
+		RarityTier targetTier = RarityTier.valueOf(tier.name());
+		for (int itemId : shuffled)
+		{
+			CompletionEntry entry = data.byId.get(itemId);
+			if (entry == null || entry.name == null)
+			{
+				continue;
+			}
+			if (resolve(itemId, entry.name).getTier() == targetTier)
+			{
+				return itemId;
+			}
+		}
+		return null;
+	}
+
+	/**
 	 * @param itemId resolved item id, or -1 if it couldn't be resolved (see ItemIdResolver). Falls
 	 *                back to a value-score-only composite using price 0 in that case, same as an
 	 *                item with no GE price at all.

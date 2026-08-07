@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced.overlay;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
+import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityTier;
 import com.snakesteak.collectionlogpopupenhanced.sound.SoundManager;
 import java.awt.AlphaComposite;
@@ -306,7 +307,7 @@ public class CollectionLogOverlay extends Overlay
 		// Preview mode holds the item on screen indefinitely (see #advance) instead of fading it out
 		// on the usual timer, so users can freely tweak scale/text settings without it disappearing.
 		float fadeAlpha;
-		if (config.previewMode())
+		if (config.previewTier() != PreviewTier.NONE)
 		{
 			fadeAlpha = 1f;
 		}
@@ -521,7 +522,7 @@ public class CollectionLogOverlay extends Overlay
 			return;
 		}
 
-		if (config.previewMode())
+		if (config.previewTier() != PreviewTier.NONE)
 		{
 			// Held indefinitely - see the fadeAlpha branch in #render.
 			return;

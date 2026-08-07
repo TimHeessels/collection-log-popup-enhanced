@@ -7,6 +7,7 @@ import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.LocalRarityDatasetLoader;
+import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
 import java.util.Arrays;
@@ -74,7 +75,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Inject
 	private CollectionLogPopupEnhancedConfig config;
 
-	private boolean previousPreviewMode;
+	private PreviewTier previousPreviewTier = PreviewTier.NONE;
 
 	@Override
 	protected void startUp() throws Exception
@@ -100,31 +101,33 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick gameTick)
 	{
-		boolean previewMode = config.previewMode();
-		if (previewMode && !previousPreviewMode)
+		PreviewTier previewTier = config.previewTier();
+		if (previewTier != previousPreviewTier)
 		{
-			// Just turned on - dismiss whatever's currently showing/queued (e.g. a real unlock still
-			// mid-animation) so the held preview item starts from a clean slate.
+			// Turned on, off, or switched to a different tier - dismiss whatever's currently
+			// showing/queued (e.g. a real unlock still mid-animation, or the previous tier's held
+			// preview item) so the next state starts from a clean slate. A held item also has a stale
+			// notificationStartMillis from whenever it first appeared, so its normal hold/fade timer
+			// (see CollectionLogOverlay#advance) would resume from an unpredictable point if left alone.
 			collectionLogOverlay.clear();
 		}
-		else if (!previewMode && previousPreviewMode)
-		{
-			// Just turned off - the previously held item has a stale notificationStartMillis from
-			// whenever it first appeared, so its normal hold/fade timer (see CollectionLogOverlay#advance)
-			// would resume from an unpredictable point. Clearing it outright is simpler and less jarring
-			// than trying to resume that timer correctly.
-			collectionLogOverlay.clear();
-		}
-		previousPreviewMode = previewMode;
+		previousPreviewTier = previewTier;
 
-		// Triggers a random item as soon as preview mode is enabled (the overlay starts idle); the
-		// overlay then holds it on screen indefinitely instead of fading it out (see
+		// Triggers a random item of the selected tier as soon as preview mode is enabled (the overlay
+		// starts idle); the overlay then holds it on screen indefinitely instead of fading it out (see
 		// CollectionLogOverlay#advance), so this doesn't re-fire again until preview mode is toggled
-		// off and back on. Same test pipeline as the "::clogtest" dev command, just driven by the
-		// config toggle instead of a chat command so any user can preview.
-		if (previewMode && collectionLogOverlay.isIdle())
+		// off/switched and back. Same test pipeline as the "::clogtest" dev command, just driven by the
+		// config option instead of a chat command so any user can preview.
+		if (previewTier != PreviewTier.NONE && collectionLogOverlay.isIdle())
 		{
-			testRandomDatasetItems(1);
+			if (previewTier == PreviewTier.RANDOM)
+			{
+				testRandomDatasetItems(1);
+			}
+			else
+			{
+				testTierPreviewItem(previewTier);
+			}
 		}
 	}
 
@@ -221,6 +224,20 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			String itemName = itemManager.getItemComposition(canonicalId).getName();
 			handleNewCollectionLogItem(canonicalId, itemName, null);
 		}
+	}
+
+	private void testTierPreviewItem(PreviewTier tier)
+	{
+		Integer itemId = rarityResolver.randomItemIdForTier(tier);
+		if (itemId == null)
+		{
+			log.debug("No {} tier items available to preview - rarity dataset failed to load, or no item of that tier exists.", tier);
+			return;
+		}
+
+		int canonicalId = itemManager.canonicalize(itemId);
+		String itemName = itemManager.getItemComposition(canonicalId).getName();
+		handleNewCollectionLogItem(canonicalId, itemName, null);
 	}
 
 	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, Integer forcedKillCount)

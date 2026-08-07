@@ -4,6 +4,7 @@ import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.TextRenderMode;
 import com.snakesteak.collectionlogpopupenhanced.overlay.ValueDisplayMode;
+import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityBasis;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
@@ -199,13 +200,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "previewMode",
+		keyName = "previewTier",
 		name = "Preview popup",
-		description = "Shows a test item as long as this toggle is active",
+		description = "Shows a random item popup of the selected tier",
 		section = appearanceSection
 	)
-	default boolean previewMode()
+	default PreviewTier previewTier()
 	{
-		return false;
+		return PreviewTier.NONE;
 	}
 }

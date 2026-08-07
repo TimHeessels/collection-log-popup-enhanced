@@ -14,10 +14,11 @@ In settings menu,
 ![alt text](image-4.png)
 ![alt text](image-3.png)
 
-# Testing
-To test the plugin and set the scale of the popup enable the 'preview popup' toggle. This will show the popup as if you got a random item.
-Scale the popup and set text-rendering to what looks good to you. Crisp text looks best at higher scale, smooth at lower.
-![alt text](image-5.png)
+# Appearance
+To test the plugin and set the scale of the popup select any tier in the 'preview popup' dropdown. This will show the popup as if you got a random item from that tier.
+You can also scale the popup and set text-rendering to what looks good to you. Crisp text looks best at higher scale, smooth at lower.
+
+![alt text](appearance_settings.png)
 
 # Popup
 The popup will apear on gaining a new collection log slot, and show the icon for the item.
@@ -32,6 +33,16 @@ At the top of the panel two values are displayed (configurable in setting). Thes
 - Value of the item
 -- Based on G.E or High alch.
 
+# Custom sounds
+Want to use your own sound effects instead? Place any or all '.wav' files into '.runelite/collection-log-popup-enhanced/sounds/', using these exact filenames:
+- `common.wav`
+- `uncommon.wav`
+- `rare.wav`
+- `very_rare.wav`
+- `pet.wav`
+And it will use your sound instead! (See 'Appearance' on how to test if your audio works)
+(Note: if it still plays the default sound and the spelling is correct, your audio file is not supported, try another.)
+
 # Thanks to:
 C engineer plugin for collection log slot popup tie ins
 Trailblazer audio effect for references to scripts on playing audio
@@ -42,17 +53,11 @@ and customized by me in photoshop.
 
 Sound effects:
 Common: https://freesound.org/people/Kenneth_Cooney/sounds/609336/
-Uncommon: https://freesound.org/people/PearceWilsonKing/sounds/238855/
-Rare: https://freesound.org/people/jobro/sounds/198808/
-Very rare: https://freesound.org/people/_MC5_/sounds/524848/
-Pet: https://freesound.org/people/Tuudurt/sounds/275104/
 
-## Custom sounds
-Want to use your own sound effects instead? Place any or all '.wav' files into '.runelite/collection-log-popup-enhanced/sounds/', using these exact filenames:
-- `common.wav`
-- `uncommon.wav`
-- `rare.wav`
-- `very_rare.wav`
-- `pet.wav`
-And it will use your sound instead!
-(Note: if it still plays the default sound and the spelling is correct, your audio file is not supported, try another.)
+Uncommon: https://freesound.org/people/PearceWilsonKing/sounds/238855/
+
+Rare: https://freesound.org/people/jobro/sounds/198808/
+
+Very rare: https://freesound.org/people/_MC5_/sounds/524848/
+
+Pet: https://freesound.org/people/Tuudurt/sounds/275104/

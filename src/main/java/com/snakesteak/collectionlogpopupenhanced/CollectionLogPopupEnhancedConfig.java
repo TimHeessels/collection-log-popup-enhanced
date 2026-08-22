@@ -6,6 +6,7 @@ import com.snakesteak.collectionlogpopupenhanced.overlay.TextRenderMode;
 import com.snakesteak.collectionlogpopupenhanced.overlay.ValueDisplayMode;
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityBasis;
+import java.awt.Color;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
@@ -42,6 +43,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		position = 3
 	)
 	String appearanceSection = "appearanceSection";
+
+	@ConfigSection(
+		name = "Colours",
+		description = "Border and background colour of the popup, per rarity tier",
+		position = 4
+	)
+	String coloursSection = "coloursSection";
 
 	@ConfigItem(
 		keyName = "rarityBasis",
@@ -208,5 +216,114 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	default PreviewTier previewTier()
 	{
 		return PreviewTier.NONE;
+	}
+
+	@ConfigItem(
+		keyName = "colourCommonTier",
+		position = 0,
+		name = "Common",
+		description = "Border, divider and item name colour of the popup shown for Common-tier items. The panel background is derived from this.",
+		section = coloursSection
+	)
+	default Color colourCommonTier()
+	{
+		return new Color(0xFFFFFF);
+	}
+
+	@ConfigItem(
+		keyName = "colourUncommonTier",
+		position = 1,
+		name = "Uncommon",
+		description = "Border, divider and item name colour of the popup shown for Uncommon-tier items. The panel background is derived from this.",
+		section = coloursSection
+	)
+	default Color colourUncommonTier()
+	{
+		return new Color(0x1888C9);
+	}
+
+	@ConfigItem(
+		keyName = "colourRareTier",
+		position = 2,
+		name = "Rare",
+		description = "Border, divider and item name colour of the popup shown for Rare-tier items. The panel background is derived from this.",
+		section = coloursSection
+	)
+	default Color colourRareTier()
+	{
+		return new Color(0x8431A6);
+	}
+
+	@ConfigItem(
+		keyName = "colourVeryRareTier",
+		position = 3,
+		name = "Very rare",
+		description = "Border, divider and item name colour of the popup shown for Very rare-tier items. The panel background is derived from this.",
+		section = coloursSection
+	)
+	default Color colourVeryRareTier()
+	{
+		return new Color(0xB19F3B);
+	}
+
+	@ConfigItem(
+		keyName = "colourPetTier",
+		position = 4,
+		name = "Pet",
+		description = "Border, divider and item name colour of the popup shown for pets. The panel background is derived from this.",
+		section = coloursSection
+	)
+	default Color colourPetTier()
+	{
+		return new Color(0xDC2367);
+	}
+
+	@Range(min = 10, max = 60)
+	@ConfigItem(
+		keyName = "backgroundDarkness",
+		position = 5,
+		name = "Background darkness (%)",
+		description = "How dark the panel background is relative to its tier colour. Lower is darker",
+		section = coloursSection
+	)
+	default int backgroundDarkness()
+	{
+		return 30;
+	}
+
+	@ConfigItem(
+		keyName = "colourCaption",
+		position = 6,
+		name = "Caption text",
+		description = "Colour of the \"Collection log slot\" caption",
+		section = coloursSection
+	)
+	default Color colourCaption()
+	{
+		return new Color(0xFF981F);
+	}
+
+	@ConfigItem(
+		keyName = "colourStatLabel",
+		position = 7,
+		name = "Statistic labels",
+		description = "Colour of the bottom-corner statistic labels, e.g. \"Wiki Comp%\" and \"Drop rate\"",
+		section = coloursSection
+	)
+	default Color colourStatLabel()
+	{
+		return new Color(0xDCDCD6);
+	}
+
+	@ConfigItem(
+		keyName = "colourStatValue",
+		position = 8,
+		name = "Statistic values",
+		description = "Colour of the bottom-corner statistic values. The Wiki Comp% value follows the tier colour instead.",
+		section = coloursSection
+	)
+	default Color colourStatValue()
+	{
+		return new Color(0xFFCD2D);
 	}
 }

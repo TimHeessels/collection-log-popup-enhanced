@@ -18,6 +18,8 @@ In settings menu,
 To test the plugin and set the scale of the popup select any tier in the 'preview popup' dropdown. This will show the popup as if you got a random item from that tier.
 You can also scale the popup and set text-rendering to what looks good to you. Crisp text looks best at higher scale, smooth at lower.
 
+Keep in mind that the popup might not cover the build-in popup on when set too small. (Build-in needs to be active if you wish screenshots to wait for the popup to be fully open)
+
 ![alt text](appearance_settings.png)
 
 # Popup

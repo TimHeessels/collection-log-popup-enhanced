@@ -83,14 +83,10 @@ public class CollectionLogOverlay extends Overlay
 	private static final String CAPTION_TEXT = "Collection log slot";
 	private static final int BASE_CAPTION_BASELINE_Y = 22;
 
-	private static final Color TITLE_COLOR = new Color(255, 152, 31);
-	private static final Color COMMON_COLOR = new Color(220, 220, 214);
-	private static final Color UNCOMMON_COLOR = new Color(43, 127, 191);
-	private static final Color RARE_COLOR = new Color(175, 43, 191);
-	private static final Color VERY_RARE_COLOR = new Color(191, 182, 43);
-	private static final Color PET_COLOR = new Color(235, 120, 190);
-	private static final Color PRICE_LABEL_COLOR = COMMON_COLOR;
-	private static final Color PRICE_VALUE_COLOR = new Color(255, 205, 45);
+	// The colour picker offers an alpha slider, but the panel art rebuilds every pixel from the
+	// source art's own alpha, so a picked alpha can only ever apply to the text - which would leave
+	// one config value meaning two different things. Alpha is stripped on read instead, everywhere.
+	private static final int RGB_MASK = 0xFFFFFF;
 
 	private static final float BASE_CORNER_LABEL_FONT_SIZE = 16f;
 	private static final float BASE_CORNER_VALUE_FONT_SIZE = 19f;
@@ -113,6 +109,11 @@ public class CollectionLogOverlay extends Overlay
 	private final ItemManager itemManager;
 	private final CollectionLogPopupEnhancedConfig config;
 	private final SoundManager soundManager;
+	// Pristine art as loaded from the jar, kept so #applyColours can always recolour from the
+	// original pixels rather than compounding successive recolours.
+	private final Map<RarityTier, BufferedImage> sourceBackgrounds = new EnumMap<>(RarityTier.class);
+	private final Map<RarityTier, BufferedImage> sourceIconFrames = new EnumMap<>(RarityTier.class);
+	// What actually gets drawn - the source art recoloured to the configured per-tier colours.
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
 
@@ -125,6 +126,9 @@ public class CollectionLogOverlay extends Overlay
 	// Scaled layout/font state, recomputed by #applyScale only when config.overlayScalePercent()
 	// changes (rather than every frame) since Font#deriveFont isn't free to call 50x/sec for nothing.
 	private int lastScalePercent = -1;
+	// Cache key for the recoloured art: the five tier colours plus the background darkness (see
+	// #readColours), so #render can detect a change cheaply; null until #applyColours has run.
+	private int[] lastColours;
 	private boolean textOutlineEnabled;
 	private int panelWidth;
 	private int panelHeight;
@@ -168,19 +172,20 @@ public class CollectionLogOverlay extends Overlay
 		// get silently undone next frame - disable that instead of leaving it non-functional.
 		setMovable(false);
 
-		backgrounds.put(RarityTier.COMMON, loadImage("Backgrounds/BackgroundPanel1.png"));
-		backgrounds.put(RarityTier.UNCOMMON, loadImage("Backgrounds/BackgroundPanel2.png"));
-		backgrounds.put(RarityTier.RARE, loadImage("Backgrounds/BackgroundPanel3.png"));
-		backgrounds.put(RarityTier.VERY_RARE, loadImage("Backgrounds/BackgroundPanel4.png"));
-		backgrounds.put(RarityTier.PET, loadImage("Backgrounds/BackgroundPanelPet.png"));
+		sourceBackgrounds.put(RarityTier.COMMON, loadImage("Backgrounds/BackgroundPanel1.png"));
+		sourceBackgrounds.put(RarityTier.UNCOMMON, loadImage("Backgrounds/BackgroundPanel2.png"));
+		sourceBackgrounds.put(RarityTier.RARE, loadImage("Backgrounds/BackgroundPanel3.png"));
+		sourceBackgrounds.put(RarityTier.VERY_RARE, loadImage("Backgrounds/BackgroundPanel4.png"));
+		sourceBackgrounds.put(RarityTier.PET, loadImage("Backgrounds/BackgroundPanelPet.png"));
 
-		iconFrames.put(RarityTier.COMMON, loadImage("Icons/IconPanel1.png"));
-		iconFrames.put(RarityTier.UNCOMMON, loadImage("Icons/IconPanel2.png"));
-		iconFrames.put(RarityTier.RARE, loadImage("Icons/IconPanel3.png"));
-		iconFrames.put(RarityTier.VERY_RARE, loadImage("Icons/IconPanel4.png"));
-		iconFrames.put(RarityTier.PET, loadImage("Icons/IconPanelPet.png"));
+		sourceIconFrames.put(RarityTier.COMMON, loadImage("Icons/IconPanel1.png"));
+		sourceIconFrames.put(RarityTier.UNCOMMON, loadImage("Icons/IconPanel2.png"));
+		sourceIconFrames.put(RarityTier.RARE, loadImage("Icons/IconPanel3.png"));
+		sourceIconFrames.put(RarityTier.VERY_RARE, loadImage("Icons/IconPanel4.png"));
+		sourceIconFrames.put(RarityTier.PET, loadImage("Icons/IconPanelPet.png"));
 
 		applyScale(config.overlayScalePercent());
+		applyColours(readColours());
 	}
 
 	/**
@@ -221,6 +226,43 @@ public class CollectionLogOverlay extends Overlay
 		captionFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CAPTION_FONT_SIZE * scale);
 
 		lastScalePercent = scalePercent;
+	}
+
+	/**
+	 * Builds the cache key #render compares against to decide whether the panel art needs rebuilding:
+	 * every configured tier colour plus the background darkness. Purely a change detector - the
+	 * rebuild itself re-reads each colour by tier (see #applyColours), so this array's order carries
+	 * no meaning beyond being stable from one frame to the next.
+	 */
+	private int[] readColours()
+	{
+		RarityTier[] tiers = RarityTier.values();
+		int[] key = new int[tiers.length + 1];
+		for (int i = 0; i < tiers.length; i++)
+		{
+			key[i] = tierColor(tiers[i]).getRGB();
+		}
+		// Part of the cache key, not a colour: changing it re-derives every background.
+		key[tiers.length] = config.backgroundDarkness();
+		return key;
+	}
+
+	/**
+	 * Rebuilds the drawn panel/icon art for every tier from the pristine sources. Recolouring all ten
+	 * images touches ~280k pixels, so this runs only on startup and when a colour actually changes
+	 * (see #render) - never per frame.
+	 */
+	private void applyColours(int[] colours)
+	{
+		int darkness = config.backgroundDarkness();
+		for (RarityTier tier : RarityTier.values())
+		{
+			Color border = tierColor(tier);
+			Color background = PanelRecolorer.deriveBackground(border, darkness);
+			backgrounds.put(tier, PanelRecolorer.recolor(sourceBackgrounds.get(tier), tier, border, background));
+			iconFrames.put(tier, PanelRecolorer.recolor(sourceIconFrames.get(tier), tier, border, background));
+		}
+		lastColours = colours;
 	}
 
 	private static BufferedImage loadImage(String resourceName)
@@ -271,6 +313,12 @@ public class CollectionLogOverlay extends Overlay
 		if (scalePercent != lastScalePercent)
 		{
 			applyScale(scalePercent);
+		}
+
+		int[] colours = readColours();
+		if (!Arrays.equals(colours, lastColours))
+		{
+			applyColours(colours);
 		}
 
 		// TOP_CENTER's own snap-corner centering is relative to the HUD container widget, not the
@@ -444,7 +492,7 @@ public class CollectionLogOverlay extends Overlay
 		// from the panel's top edge downward: caption, then name, then the bottom corner stats.
 		graphics.setFont(captionFont);
 		int captionX = (panelWidth - graphics.getFontMetrics().stringWidth(CAPTION_TEXT)) / 2;
-		drawOutlinedString(graphics, CAPTION_TEXT, captionX, captionBaselineY, TITLE_COLOR);
+		drawOutlinedString(graphics, CAPTION_TEXT, captionX, captionBaselineY, opaque(config.colourCaption()));
 
 		int maxNameWidth = panelWidth - 2 * nameSideMargin;
 		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth, nameFontMinSize);
@@ -483,7 +531,7 @@ public class CollectionLogOverlay extends Overlay
 	private void drawCornerStat(Graphics2D graphics, Stat stat, int edgeX, boolean rightAligned, FontMetrics labelMetrics, FontMetrics valueMetrics)
 	{
 		graphics.setFont(labelMetrics.getFont());
-		drawOutlinedString(graphics, stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, cornerLabelBaselineY, PRICE_LABEL_COLOR);
+		drawOutlinedString(graphics, stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, cornerLabelBaselineY, opaque(config.colourStatLabel()));
 
 		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
 		// a smaller font and tighter line spacing so both still fit above the item name.
@@ -685,7 +733,7 @@ public class CollectionLogOverlay extends Overlay
 				int displayPrice = showAlch ? item.getAlchPrice() : item.getPrice();
 				boolean displayHighAlch = showAlch || item.isHighAlch();
 				String valueText = formatValue(displayPrice) + " gp" + (displayHighAlch ? " (HA)" : "");
-				return new Stat("Value: ", List.of(valueText), PRICE_VALUE_COLOR);
+				return new Stat("Value: ", List.of(valueText), opaque(config.colourStatValue()));
 			case RARITY:
 				if (item.getCompPercent() == null)
 				{
@@ -698,11 +746,11 @@ public class CollectionLogOverlay extends Overlay
 					return null;
 				}
 				String killCountText = QuantityFormatter.formatNumber(item.getKillCount());
-				return new Stat("KC: ", List.of(killCountText), PRICE_VALUE_COLOR);
+				return new Stat("KC: ", List.of(killCountText), opaque(config.colourStatValue()));
 			case DROP_RATE:
 				if (item.getDropProbability() != null)
 				{
-					return new Stat("Drop rate: ", List.of(formatFraction(item.getDropProbability())), PRICE_VALUE_COLOR);
+					return new Stat("Drop rate: ", List.of(formatFraction(item.getDropProbability())), opaque(config.colourStatValue()));
 				}
 				// No single known rate - show the rarest-to-most-common range across every tracked
 				// source instead of hiding the stat, regardless of how many sources there are.
@@ -716,7 +764,7 @@ public class CollectionLogOverlay extends Overlay
 				String rangeText = minProbability == maxProbability
 					? formatFraction(minProbability)
 					: formatFraction(minProbability) + " - " + formatFraction(maxProbability);
-				return new Stat("Drop rate: ", List.of(rangeText), PRICE_VALUE_COLOR);
+				return new Stat("Drop rate: ", List.of(rangeText), opaque(config.colourStatValue()));
 			case NONE:
 			default:
 				return null;
@@ -763,23 +811,35 @@ public class CollectionLogOverlay extends Overlay
 		return String.format("%.1f", value / (double) unit);
 	}
 
-	private static Color tierColor(RarityTier tier)
+	/**
+	 * The configured colour for {@code tier}, used for both the panel art and the item name/Wiki Comp%
+	 * text so they always read as the same tier.
+	 */
+	private Color tierColor(RarityTier tier)
 	{
 		switch (tier)
 		{
 			case COMMON:
-				return COMMON_COLOR;
+				return opaque(config.colourCommonTier());
 			case UNCOMMON:
-				return UNCOMMON_COLOR;
+				return opaque(config.colourUncommonTier());
 			case RARE:
-				return RARE_COLOR;
+				return opaque(config.colourRareTier());
 			case VERY_RARE:
-				return VERY_RARE_COLOR;
+				return opaque(config.colourVeryRareTier());
 			case PET:
-				return PET_COLOR;
+				return opaque(config.colourPetTier());
 			default:
-				return COMMON_COLOR;
+				return opaque(config.colourCommonTier());
 		}
+	}
+
+	/**
+	 * Drops any alpha the colour picker allowed the user to dial in - see {@link #RGB_MASK}.
+	 */
+	private static Color opaque(Color color)
+	{
+		return color.getAlpha() == 0xFF ? color : new Color(color.getRGB() & RGB_MASK);
 	}
 
 	@Value

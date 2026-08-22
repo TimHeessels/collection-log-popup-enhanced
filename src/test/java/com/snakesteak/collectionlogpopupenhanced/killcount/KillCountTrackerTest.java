@@ -86,4 +86,76 @@ public class KillCountTrackerTest
 		assertEquals("Maggot King", kill.getSource());
 		assertEquals(350, kill.getKillCount());
 	}
+
+	@Test
+	public void matchesSourceWithLeadingArticle()
+	{
+		// The collection log tab is "The Mad Angel", but the kill count message omits the article.
+		fireMessage("Your Mad Angel kill count is: <col=ff0000>35</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Mad Angel"));
+		assertEquals("Mad Angel", kill.getSource());
+		assertEquals(35, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesOtherArticlePrefixedSources()
+	{
+		fireMessage("Your Nightmare kill count is: <col=ff0000>12</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Nightmare"));
+		assertEquals("Nightmare", kill.getSource());
+		assertEquals(12, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesDagannothKingsVariantAgainstGroupedTab()
+	{
+		fireMessage("Your Dagannoth Rex kill count is: <col=ff0000>5</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Dagannoth Kings"));
+		assertEquals("Dagannoth Rex", kill.getSource());
+		assertEquals(5, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesWildernessDuoBossAgainstGroupedTab()
+	{
+		fireMessage("Your Callisto kill count is: <col=ff0000>2</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Callisto and Artio"));
+		assertEquals("Callisto", kill.getSource());
+		assertEquals(2, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesBarrowsChestAgainstJsonTabName()
+	{
+		// The dataset's tab is "Barrows Chests" (plural) - the chat message says "Barrows chest".
+		fireMessage("Your Barrows chest count is: <col=ff0000>128</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Barrows Chests"));
+		assertEquals("Barrows chest", kill.getSource());
+		assertEquals(128, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesLunarChestAgainstMoonsOfPerilTab()
+	{
+		// The dataset has no "Lunar Chest" tab at all - Moons of Peril loot is tracked under
+		// "Moons of Peril", while the chat message names the chest itself.
+		fireMessage("Your Lunar Chest count is: <col=ff0000>320</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Moons of Peril"));
+		assertEquals("Lunar Chest", kill.getSource());
+		assertEquals(320, kill.getKillCount());
+	}
+
+	@Test
+	public void doesNotFalselyMatchUnrelatedGroupedBoss()
+	{
+		fireMessage("Your Vet'ion kill count is: <col=ff0000>7</col>.");
+
+		assertNull(tracker.killCountFor(List.of("Callisto and Artio")));
+	}
 }

@@ -41,7 +41,7 @@ Want to use your own sound effects instead? Place any or all '.wav' files into '
 - `very_rare.wav`
 - `pet.wav`
 And it will use your sound instead! (See 'Appearance' on how to test if your audio works)
-(Note: if it still plays the default sound and the spelling is correct, your audio file is not supported, try another.)
+(Note: if it doesn't play a sound and the spelling is correct, your audio file is not supported, try another.)
 
 # Thanks to:
 C engineer plugin for collection log slot popup tie ins

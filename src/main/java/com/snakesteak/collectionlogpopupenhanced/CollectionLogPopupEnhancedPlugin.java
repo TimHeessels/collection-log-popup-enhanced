@@ -276,12 +276,19 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			source = kill != null ? kill.getSource() : null;
 		}
 
-		Double dropProbability = source != null
-			? dropRateResolver.dropProbability(source, itemName)
-			: dropRateResolver.dropProbabilityByItemName(itemName);
-		// Without a known source, a drop from more than one tracked source has no single rate to show -
-		// collect every candidate instead so the overlay can display them all (see CollectionLogOverlay).
-		List<DropRateResolver.SourceRate> ambiguousDropRates = source == null && dropProbability == null
+		// The drop rate dataset's source names don't always agree with the kill count's source name
+		// (e.g. Barrows' kill count source is "Barrows chest", but its drop rate source is "Chest
+		// (Barrows)") - so a source-scoped miss falls back to the item-name-wide lookup rather than
+		// giving up, same as when there's no known source at all.
+		Double dropProbability = source != null ? dropRateResolver.dropProbability(source, itemName) : null;
+		if (dropProbability == null)
+		{
+			dropProbability = dropRateResolver.dropProbabilityByItemName(itemName);
+		}
+		// Without a single rate to show, a drop from more than one tracked source has no single rate to
+		// show - collect every candidate instead so the overlay can display them all (see
+		// CollectionLogOverlay).
+		List<DropRateResolver.SourceRate> ambiguousDropRates = dropProbability == null
 			? dropRateResolver.dropRatesByItemName(itemName)
 			: List.of();
 

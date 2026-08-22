@@ -24,8 +24,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	String raritySection = "raritySection";
 
 	@ConfigSection(
-		name = "Overlay",
-		description = "What the on-screen popup shows and for how long",
+		name = "Statistics",
+		description = "Statistics in bottom left and right of popup",
 		position = 1
 	)
 	String overlaySection = "overlaySection";
@@ -54,12 +54,49 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "rarityBasis",
 		name = "Rarity based on",
-		description = "Rarity determined by cost, wiki comp%, or a calculcation of both",
+		description = "Whether an item's tier comes from its value, its wiki completion percentage, or a blend of both",
+		position = 0,
 		section = raritySection
 	)
 	default RarityBasis rarityBasis()
 	{
 		return RarityBasis.COMBINATION;
+	}
+
+	@ConfigItem(
+		keyName = "valueUncommonThreshold",
+		name = "Uncommon at (gp)",
+		description = "Value threshold for uncommon tier",
+		position = 1,
+		section = raritySection
+	)
+	default int valueUncommonThreshold()
+	{
+		return 100_000;
+	}
+
+	@ConfigItem(
+		keyName = "valueRareThreshold",
+		name = "Rare at (gp)",
+		description = "Value threshold for rare tier",
+		position = 2,
+		section = raritySection
+	)
+	default int valueRareThreshold()
+	{
+		return 1_000_000;
+	}
+
+	@ConfigItem(
+		keyName = "valueVeryRareThreshold",
+		name = "Very rare at (gp)",
+		description = "Value threshold for very rare tier",
+		position = 3,
+		section = raritySection
+	)
+	default int valueVeryRareThreshold()
+	{
+		return 10_000_000;
 	}
 
 	@ConfigItem(
@@ -222,7 +259,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourCommonTier",
 		position = 0,
 		name = "Common",
-		description = "Border, divider and item name colour of the popup shown for Common-tier items. The panel background is derived from this.",
+		description = "Panel color for common tier",
 		section = coloursSection
 	)
 	default Color colourCommonTier()
@@ -234,7 +271,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourUncommonTier",
 		position = 1,
 		name = "Uncommon",
-		description = "Border, divider and item name colour of the popup shown for Uncommon-tier items. The panel background is derived from this.",
+		description = "Panel color for uncommon tier",
 		section = coloursSection
 	)
 	default Color colourUncommonTier()
@@ -246,7 +283,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourRareTier",
 		position = 2,
 		name = "Rare",
-		description = "Border, divider and item name colour of the popup shown for Rare-tier items. The panel background is derived from this.",
+		description = "Panel color for rare tier.",
 		section = coloursSection
 	)
 	default Color colourRareTier()
@@ -258,7 +295,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourVeryRareTier",
 		position = 3,
 		name = "Very rare",
-		description = "Border, divider and item name colour of the popup shown for Very rare-tier items. The panel background is derived from this.",
+		description = "Panel color for very rare tier",
 		section = coloursSection
 	)
 	default Color colourVeryRareTier()
@@ -270,7 +307,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourPetTier",
 		position = 4,
 		name = "Pet",
-		description = "Border, divider and item name colour of the popup shown for pets. The panel background is derived from this.",
+		description = "Panel color for pets.",
 		section = coloursSection
 	)
 	default Color colourPetTier()
@@ -295,7 +332,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourCaption",
 		position = 6,
 		name = "Caption text",
-		description = "Colour of the \"Collection log slot\" caption",
+		description = "Colour of the Collection log slot caption",
 		section = coloursSection
 	)
 	default Color colourCaption()
@@ -307,7 +344,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourStatLabel",
 		position = 7,
 		name = "Statistic labels",
-		description = "Colour of the bottom-corner statistic labels, e.g. \"Wiki Comp%\" and \"Drop rate\"",
+		description = "Colour of the bottom-corner statistic labels.",
 		section = coloursSection
 	)
 	default Color colourStatLabel()
@@ -319,7 +356,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourStatValue",
 		position = 8,
 		name = "Statistic values",
-		description = "Colour of the bottom-corner statistic values. The Wiki Comp% value follows the tier colour instead.",
+		description = "Colour of the bottom-corner statistic values.",
 		section = coloursSection
 	)
 	default Color colourStatValue()

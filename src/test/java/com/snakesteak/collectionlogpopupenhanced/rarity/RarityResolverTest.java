@@ -35,6 +35,42 @@ public class RarityResolverTest
 	private ItemManager itemManager;
 	private DropRateResolver dropRateResolver;
 	private RarityResolver resolver;
+	private TestConfig config;
+
+	/**
+	 * Defaults to the real config's values; individual tests override the basis and the gp cutoffs.
+	 */
+	private static final class TestConfig implements CollectionLogPopupEnhancedConfig
+	{
+		private RarityBasis basis = CollectionLogPopupEnhancedConfig.super.rarityBasis();
+		private int uncommon = CollectionLogPopupEnhancedConfig.super.valueUncommonThreshold();
+		private int rare = CollectionLogPopupEnhancedConfig.super.valueRareThreshold();
+		private int veryRare = CollectionLogPopupEnhancedConfig.super.valueVeryRareThreshold();
+
+		@Override
+		public RarityBasis rarityBasis()
+		{
+			return basis;
+		}
+
+		@Override
+		public int valueUncommonThreshold()
+		{
+			return uncommon;
+		}
+
+		@Override
+		public int valueRareThreshold()
+		{
+			return rare;
+		}
+
+		@Override
+		public int valueVeryRareThreshold()
+		{
+			return veryRare;
+		}
+	}
 
 	@Before
 	public void before()
@@ -48,9 +84,7 @@ public class RarityResolverTest
 		// fallback was added. Individual tests override this per-name where needed.
 		dropRateResolver = mock(DropRateResolver.class);
 		when(dropRateResolver.dropProbabilityByItemName(anyString())).thenReturn(null);
-		CollectionLogPopupEnhancedConfig config = new CollectionLogPopupEnhancedConfig()
-		{
-		};
+		config = new TestConfig();
 		resolver = new RarityResolver(itemManager, config, dropRateResolver);
 		resolver.reload(loadFixture());
 	}
@@ -125,12 +159,13 @@ public class RarityResolverTest
 		assertEquals(RarityTier.COMMON, resolver.resolve(11849, "Not a pet").getTier());
 	}
 
+	// An item with a price but no wiki completion score is bucketed on the same absolute gp cutoffs
+	// the VALUE basis uses, so an identical price can't tier one way here and another way there.
+	// This used to rank the price against a synthetic distribution, which called 1000gp VERY_RARE
+	// purely because it topped that distribution - now 1000gp is simply below every cutoff.
 	@Test
-	public void unknownItemFallsBackToValueScoreOnly()
+	public void unknownItemWithPriceIsBucketedByThreshold()
 	{
-		// Synthetic, varying price per id so the value-score distribution isn't degenerate;
-		// id 999999 lands on the max synthetic price (1000), so it should rank at the top
-		// of the value-score-only distribution used when an item has no completion data.
 		when(itemManager.getItemPrice(anyInt())).thenAnswer(invocation ->
 		{
 			int id = invocation.getArgument(0);
@@ -138,8 +173,17 @@ public class RarityResolverTest
 		});
 
 		RarityResult result = resolver.resolve(999_999, "Brand new item");
-		assertEquals(RarityTier.VERY_RARE, result.getTier());
+		assertEquals(RarityTier.COMMON, result.getTier());
 		assertEquals(1000, result.getPrice());
+	}
+
+	@Test
+	public void unknownItemWithHighPriceIsBucketedByThreshold()
+	{
+		when(itemManager.getItemPrice(999_999)).thenReturn(2_000_000);
+
+		RarityResult result = resolver.resolve(999_999, "Brand new expensive item");
+		assertEquals(RarityTier.RARE, result.getTier());
 	}
 
 	// itemId -1 with completely unstubbed (all-zero) prices means there's no usable price signal
@@ -263,5 +307,145 @@ public class RarityResolverTest
 
 		RarityResult result = resolver.resolve(-1, "Cupric sulfate (Members)");
 		assertEquals(RarityTier.COMMON, result.getTier());
+	}
+
+	// --- Value basis: absolute gp thresholds (defaults 100k / 1m / 10m) ---
+
+	private RarityTier tierForPrice(int price)
+	{
+		config.basis = RarityBasis.VALUE;
+		when(itemManager.getItemPrice(4508)).thenReturn(price);
+		return resolver.resolve(4508, "Not a pet").getTier();
+	}
+
+	@Test
+	public void valueBasisBucketsEachBand()
+	{
+		assertEquals(RarityTier.COMMON, tierForPrice(99_999));
+		assertEquals(RarityTier.UNCOMMON, tierForPrice(500_000));
+		assertEquals(RarityTier.RARE, tierForPrice(5_000_000));
+		assertEquals(RarityTier.VERY_RARE, tierForPrice(50_000_000));
+	}
+
+	// A price exactly on a cutoff belongs to the higher tier ("worth at least X").
+	@Test
+	public void valueBasisTreatsExactThresholdAsTheHigherTier()
+	{
+		assertEquals(RarityTier.UNCOMMON, tierForPrice(100_000));
+		assertEquals(RarityTier.RARE, tierForPrice(1_000_000));
+		assertEquals(RarityTier.VERY_RARE, tierForPrice(10_000_000));
+	}
+
+	// A zero price is simply below the lowest cutoff - there's no drop-rate fallback on this path,
+	// so even an item with a very rare drop rate stays COMMON when it's worth nothing.
+	@Test
+	public void valueBasisTreatsUnpricedItemAsCommonWithoutDropRateFallback()
+	{
+		when(dropRateResolver.dropProbabilityByItemName("Crimson kisten")).thenReturn(0.0019230769230769162);
+		config.basis = RarityBasis.VALUE;
+
+		RarityResult result = resolver.resolve(-1, "Crimson kisten");
+		assertEquals(0, result.getPrice());
+		assertEquals(RarityTier.COMMON, result.getTier());
+	}
+
+	// The GE -> high alch fallback still feeds the threshold comparison.
+	@Test
+	public void valueBasisBucketsOnHighAlchWhenNoGePrice()
+	{
+		config.basis = RarityBasis.VALUE;
+		when(itemManager.getItemPrice(4508)).thenReturn(0);
+		ItemComposition composition = mock(ItemComposition.class);
+		when(composition.getHaPrice()).thenReturn(2_000_000);
+		when(itemManager.getItemComposition(4508)).thenReturn(composition);
+
+		RarityResult result = resolver.resolve(4508, "Not a pet");
+		assertEquals(RarityTier.RARE, result.getTier());
+		assertEquals(true, result.isHighAlch());
+	}
+
+	@Test
+	public void petStillWinsAheadOfThresholdsOnValueBasis()
+	{
+		config.basis = RarityBasis.VALUE;
+		when(itemManager.getItemPrice(anyInt())).thenReturn(0);
+
+		assertEquals(RarityTier.PET, resolver.resolve(11849, "Baby mole").getTier());
+	}
+
+	// A user who types Rare below Uncommon still gets monotonic tiers rather than an unreachable band.
+	@Test
+	public void outOfOrderThresholdsAreSortedIntoMonotonicBands()
+	{
+		config.uncommon = 5_000_000;
+		config.rare = 1_000_000;
+		config.veryRare = 10_000_000;
+
+		assertEquals(RarityTier.COMMON, tierForPrice(999_999));
+		assertEquals(RarityTier.UNCOMMON, tierForPrice(1_000_000));
+		assertEquals(RarityTier.RARE, tierForPrice(5_000_000));
+		assertEquals(RarityTier.VERY_RARE, tierForPrice(10_000_000));
+	}
+
+	@Test
+	public void negativeThresholdsAreClampedToZero()
+	{
+		config.uncommon = -1;
+		config.rare = 1_000_000;
+		config.veryRare = 10_000_000;
+
+		// Clamped to 0, so even a free item clears the lowest cutoff.
+		assertEquals(RarityTier.UNCOMMON, tierForPrice(0));
+	}
+
+	// --- Combination basis: still percentile-ranked, but the value half honours the thresholds ---
+
+	// The regression guard that proves the gp fields actually reach the DEFAULT basis: raising a
+	// threshold past the item's price drops its value score, so its composite score falls too.
+	@Test
+	public void raisingThresholdPastPriceLowersCombinationValueScore()
+	{
+		when(itemManager.getItemPrice(4508)).thenReturn(2_000_000);
+
+		double before = resolver.resolve(4508, "Not a pet").getValueScore();
+		config.rare = 50_000_000;
+		config.veryRare = 100_000_000;
+		double after = resolver.resolve(4508, "Not a pet").getValueScore();
+
+		assertEquals(2 / 3.0, before, 1e-9);
+		assertEquals(1 / 3.0, after, 1e-9);
+	}
+
+	// The inconsistency this change closes: an item with a price but no comp% must tier the same way
+	// whether the basis is VALUE or COMBINATION, since both are value-driven for such an item.
+	@Test
+	public void combinationAgreesWithValueForPricedItemWithNoCompPercent()
+	{
+		when(itemManager.getItemPrice(999_999)).thenReturn(2_000_000);
+
+		config.basis = RarityBasis.COMBINATION;
+		RarityTier combination = resolver.resolve(999_999, "Brand new item").getTier();
+		config.basis = RarityBasis.VALUE;
+		RarityTier value = resolver.resolve(999_999, "Brand new item").getTier();
+
+		assertEquals(value, combination);
+		assertEquals(RarityTier.RARE, combination);
+	}
+
+	// The RARITY basis ranks comp% only and must stay completely unaffected by the gp thresholds.
+	@Test
+	public void rarityBasisIsUnaffectedByThresholds()
+	{
+		config.basis = RarityBasis.RARITY;
+		when(itemManager.getItemPrice(4508)).thenReturn(50_000_000);
+
+		RarityTier expensive = resolver.resolve(4508, "Not a pet").getTier();
+		config.uncommon = 1;
+		config.rare = 2;
+		config.veryRare = 3;
+		RarityTier afterThresholdChange = resolver.resolve(4508, "Not a pet").getTier();
+
+		assertEquals(RarityTier.RARE, expensive);
+		assertEquals(expensive, afterThresholdChange);
 	}
 }

@@ -19,11 +19,17 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.game.ItemManager;
 
 /**
- * Resolves a collection log item's rarity tier from a composite of two signals:
+ * Resolves a collection log item's rarity tier from two signals:
  * - completion: how many WikiSync-synced players have obtained it (rarer = higher score)
- * - value: GE price, log-scaled since price spans orders of magnitude
- * The composite score is bucketed into tiers by percentile rank across the whole dataset, rather
- * than fixed cutoffs, so the tier distribution stays consistent as items get added over time.
+ * - value: GE price (high alch fallback) bucketed against the user's configured gp thresholds
+ * How they combine depends on the configured {@link RarityBasis}:
+ * - VALUE ranks on nothing at all - the price is compared directly against the user's gp cutoffs,
+ *   because "worth at least X" is what players actually mean by value, and unlike a percentile it's
+ *   predictable and tunable.
+ * - RARITY and COMBINATION still bucket by percentile rank across the whole dataset rather than
+ *   fixed cutoffs, so the tier distribution stays consistent as items get added over time.
+ *   COMBINATION's value half reuses the same gp thresholds (see {@link #valueScore}) so "value"
+ *   can't mean two different things depending on which basis is selected.
  * For items missing a completion score (e.g. recently added, not yet scored by the wiki) with no
  * usable price either (untradeable, no GE listing, no alch value), a third fallback ranks against
  * per-kill drop probability instead - see {@link #resolve} - so a rare-but-unpriced item doesn't
@@ -189,14 +195,25 @@ public class RarityResolver
 			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, 0, 0, 0, 0, 0, alchPrice);
 		}
 
-		Dataset dataset = buildDataset(data);
 		Double compPercent = compPercent(data, itemId);
 		RarityBasis basis = config.rarityBasis();
+		Double completionScore = compPercent != null ? 1 - (compPercent / 100.0) : null;
+		double valueScore = valueScore(itemId);
 
+		if (basis == RarityBasis.VALUE)
+		{
+			// Absolute gp cutoffs, not a percentile: "worth at least X" is what players actually mean
+			// by value, and unlike a percentile it's predictable and tunable. A price of 0 simply sits
+			// below the lowest cutoff and lands in COMMON, so there's no drop-rate fallback here - that
+			// only existed because a percentile of a zero price is meaningless.
+			// Returns before buildDataset() - absolute cutoffs need no distribution to rank against.
+			return new RarityResult(bucketByThreshold(price), itemId, price, highAlch, compPercent,
+				completionScore, valueScore, 0, 0, 0, 0, alchPrice);
+		}
+
+		Dataset dataset = buildDataset(data);
 		double score;
 		double[] distribution;
-		Double completionScore = compPercent != null ? 1 - (compPercent / 100.0) : null;
-		double valueScore = valueScore(itemId, dataset);
 
 		if (basis == RarityBasis.RARITY)
 		{
@@ -205,42 +222,23 @@ public class RarityResolver
 				// No completion data for this item to rank rarity-only against - nothing to back a
 				// tier with.
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-					dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+					dataset.compositeScores.length, 0, 0, alchPrice);
 			}
 			score = completionScore;
 			distribution = dataset.completionScores;
-		}
-		else if (basis == RarityBasis.VALUE)
-		{
-			if (price <= 0 || dataset.positivePricedValueScores.length == 0)
-			{
-				Double dropRateScore = dropRarityScore(itemName);
-				if (dropRateScore != null && dataset.dropRateScores.length > 0)
-				{
-					score = dropRateScore;
-					distribution = dataset.dropRateScores;
-				}
-				else
-				{
-					return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, compPercent, completionScore,
-						valueScore, 0, dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
-				}
-			}
-			else
-			{
-				score = valueScore;
-				distribution = dataset.positivePricedValueScores;
-			}
 		}
 		else if (completionScore != null)
 		{
 			score = COMPLETION_WEIGHT * completionScore + VALUE_WEIGHT * valueScore;
 			distribution = dataset.compositeScores;
 		}
-		else if (price > 0 && dataset.positivePricedValueScores.length > 0)
+		else if (price > 0)
 		{
-			score = valueScore;
-			distribution = dataset.positivePricedValueScores;
+			// Priced but unscored by the wiki: bucket on the same absolute cutoffs the VALUE basis
+			// uses, so an identical price can't tier one way here and another way there.
+			RarityTier tier = bucketByThreshold(price);
+			return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, 0,
+				dataset.compositeScores.length, 0, 0, alchPrice);
 		}
 		else
 		{
@@ -258,14 +256,14 @@ public class RarityResolver
 			else
 			{
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-					dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+					dataset.compositeScores.length, 0, 0, alchPrice);
 			}
 		}
 
 		double percentile = percentileRank(distribution, score);
 		RarityTier tier = bucketByPercentile(percentile);
 		return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, percentile,
-			dataset.compositeScores.length, dataset.logPriceMin, dataset.logPriceMax, alchPrice);
+			dataset.compositeScores.length, 0, 0, alchPrice);
 	}
 
 	private static Double compPercent(CompletionData data, int itemId)
@@ -317,27 +315,71 @@ public class RarityResolver
 		return probability != null ? 1 - probability : null;
 	}
 
-	private double valueScore(int itemId, Dataset dataset)
+	/**
+	 * The value half of the COMBINATION blend, on the same 0-1 scale as completionScore. Derived from
+	 * the user's gp thresholds rather than a percentile of price across the dataset, so "value" means
+	 * one thing everywhere in the plugin - otherwise the thresholds would be silently ignored on
+	 * COMBINATION, which is the default basis.
+	 * The four steps are deliberately coarse: three cutoffs can only distinguish four bands, and
+	 * interpolating between them would invent precision the user never expressed. Completion percent
+	 * still supplies the fine-grained signal, which is what the 0.6 weighting is for.
+	 */
+	private double valueScore(int itemId)
 	{
-		double logPrice = logPrice(getPrice(itemId));
-		if (dataset.logPriceMax <= dataset.logPriceMin)
+		return valueScoreForPrice(getPrice(itemId));
+	}
+
+	private double valueScoreForPrice(int price)
+	{
+		switch (bucketByThreshold(price))
 		{
-			return 0;
+			case VERY_RARE:
+				return 1.0;
+			case RARE:
+				return 2 / 3.0;
+			case UNCOMMON:
+				return 1 / 3.0;
+			default:
+				return 0.0;
 		}
-		double normalized = (logPrice - dataset.logPriceMin) / (dataset.logPriceMax - dataset.logPriceMin);
-		return Math.max(0, Math.min(1, normalized));
 	}
 
 	/**
-	 * ItemManager.getItemPrice() sums bundled item prices with plain int arithmetic, which can
-	 * overflow to a negative (or near-Integer.MAX_VALUE) number for at least one item in the dataset.
-	 * Math.log() of a negative input is NaN, which poisons Math.min/Math.max and corrupts the
-	 * min/max for every other item's percentile too - so prices are clamped to non-negative, and the
-	 * "+1" is done in double arithmetic so a price near Integer.MAX_VALUE can't wrap back to negative.
+	 * Buckets an absolute gp price into a tier using the user's configured cutoffs.
+	 * Reads config on every call so an edited threshold takes effect on the next unlock.
 	 */
-	private static double logPrice(int price)
+	private RarityTier bucketByThreshold(int price)
 	{
-		return Math.log(Math.max(0, price) + 1.0);
+		int[] thresholds = thresholds();
+		if (price >= thresholds[2])
+		{
+			return RarityTier.VERY_RARE;
+		}
+		if (price >= thresholds[1])
+		{
+			return RarityTier.RARE;
+		}
+		if (price >= thresholds[0])
+		{
+			return RarityTier.UNCOMMON;
+		}
+		return RarityTier.COMMON;
+	}
+
+	/**
+	 * The three configured cutoffs as {uncommon, rare, veryRare}, clamped non-negative and sorted
+	 * ascending. Sorting means a user who types Rare=5m and Very rare=1m still gets monotonic tiers
+	 * instead of a band that can never be reached.
+	 */
+	private int[] thresholds()
+	{
+		int[] thresholds = {
+			Math.max(0, config.valueUncommonThreshold()),
+			Math.max(0, config.valueRareThreshold()),
+			Math.max(0, config.valueVeryRareThreshold()),
+		};
+		Arrays.sort(thresholds);
+		return thresholds;
 	}
 
 	private static RarityTier bucketByPercentile(double percentile)
@@ -390,51 +432,24 @@ public class RarityResolver
 			.collect(Collectors.toList());
 
 		int n = scored.size();
-		double[] logPrices = new double[n];
-		double[] compPercents = new double[n];
-		boolean[] hasPositivePrice = new boolean[n];
-		double logPriceMin = Double.POSITIVE_INFINITY;
-		double logPriceMax = Double.NEGATIVE_INFINITY;
+		double[] compositeScores = new double[n];
+		double[] completionScores = new double[n];
 
 		int i = 0;
 		for (Map.Entry<Integer, CompletionEntry> entry : scored)
 		{
-			int price = getPrice(entry.getKey());
-			double logPrice = logPrice(price);
-			logPrices[i] = logPrice;
-			compPercents[i] = entry.getValue().comp;
-			hasPositivePrice[i] = price > 0;
-			logPriceMin = Math.min(logPriceMin, logPrice);
-			logPriceMax = Math.max(logPriceMax, logPrice);
+			// Must use the same threshold-derived value score the live item is scored with in
+			// resolve() - ranking an item against a distribution built a different way would skew
+			// every tier.
+			double valueScore = valueScoreForPrice(getPrice(entry.getKey()));
+			double completionScore = 1 - (entry.getValue().comp / 100.0);
+			compositeScores[i] = COMPLETION_WEIGHT * completionScore + VALUE_WEIGHT * valueScore;
+			completionScores[i] = completionScore;
 			i++;
 		}
 
-		double[] compositeScores = new double[n];
-		double[] completionScores = new double[n];
-		// Only items with a genuine positive price - unpriced items (price 0, common in this dataset)
-		// would all tie at the minimum value score, and since percentile = "% of population at or
-		// below you", tying with a huge chunk of the population perversely ranks near the TOP. The
-		// main composite path avoids this because completion score still breaks the tie; this
-		// fallback (no completion data either) has nothing else to break it with.
-		double[] positivePricedValueScores = new double[n];
-		int positivePricedCount = 0;
-		double range = logPriceMax - logPriceMin;
-		for (int j = 0; j < n; j++)
-		{
-			double valueScore = range > 0 ? Math.max(0, Math.min(1, (logPrices[j] - logPriceMin) / range)) : 0;
-			double completionScore = 1 - (compPercents[j] / 100.0);
-			compositeScores[j] = COMPLETION_WEIGHT * completionScore + VALUE_WEIGHT * valueScore;
-			completionScores[j] = completionScore;
-			if (hasPositivePrice[j])
-			{
-				positivePricedValueScores[positivePricedCount++] = valueScore;
-			}
-		}
-		positivePricedValueScores = Arrays.copyOf(positivePricedValueScores, positivePricedCount);
-
 		Arrays.sort(compositeScores);
 		Arrays.sort(completionScores);
-		Arrays.sort(positivePricedValueScores);
 
 		// Comp-less items (comp == null) are exactly the ones the drop-rate fallback exists for, so
 		// the ranking distribution is built from that same population's drop rates rather than from
@@ -448,7 +463,7 @@ public class RarityResolver
 			.sorted()
 			.toArray();
 
-		return new Dataset(compositeScores, completionScores, positivePricedValueScores, dropRateScores, logPriceMin, logPriceMax);
+		return new Dataset(compositeScores, completionScores, dropRateScores);
 	}
 
 	/**
@@ -518,20 +533,13 @@ public class RarityResolver
 	{
 		private final double[] compositeScores;
 		private final double[] completionScores;
-		private final double[] positivePricedValueScores;
 		private final double[] dropRateScores;
-		private final double logPriceMin;
-		private final double logPriceMax;
 
-		private Dataset(double[] compositeScores, double[] completionScores, double[] positivePricedValueScores,
-			double[] dropRateScores, double logPriceMin, double logPriceMax)
+		private Dataset(double[] compositeScores, double[] completionScores, double[] dropRateScores)
 		{
 			this.compositeScores = compositeScores;
 			this.completionScores = completionScores;
-			this.positivePricedValueScores = positivePricedValueScores;
 			this.dropRateScores = dropRateScores;
-			this.logPriceMin = logPriceMin;
-			this.logPriceMax = logPriceMax;
 		}
 	}
 }

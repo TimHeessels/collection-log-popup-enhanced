@@ -51,6 +51,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	String coloursSection = "coloursSection";
 
+	@ConfigSection(
+		name = "Preview",
+		description = "Preview the popup without waiting for an unlock",
+		position = 5
+	)
+	String previewSection = "previewSection";
+
 	@ConfigItem(
 		keyName = "rarityBasis",
 		name = "Rarity based on",
@@ -97,17 +104,6 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	default int valueVeryRareThreshold()
 	{
 		return 10_000_000;
-	}
-
-	@ConfigItem(
-		keyName = "overlayDisplaySeconds",
-		name = "Overlay display duration (seconds)",
-		description = "How long each new collection log item stays on screen",
-		section = overlaySection
-	)
-	default int overlayDisplaySeconds()
-	{
-		return 6;
 	}
 
 	@ConfigItem(
@@ -221,6 +217,17 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		return 65;
 	}
 
+	@ConfigItem(
+		keyName = "overlayDisplaySeconds",
+		name = "Overlay display duration (seconds)",
+		description = "How long each new collection log item stays on screen",
+		section = appearanceSection
+	)
+	default int overlayDisplaySeconds()
+	{
+		return 6;
+	}
+
 	@Range(min = 50, max = 200)
 	@ConfigItem(
 		keyName = "overlayScalePercent",
@@ -248,7 +255,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "previewTier",
 		name = "Preview popup",
 		description = "Shows a random item popup of the selected tier",
-		section = appearanceSection
+		position = 0,
+		section = previewSection
 	)
 	default PreviewTier previewTier()
 	{

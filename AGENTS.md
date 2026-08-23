@@ -80,6 +80,40 @@ After completing a task, do not declare it done. Instead:
 
 ---
 
+# This Plugin: Native Popup & Screenshots
+
+The plugin hides the game's own collection log popup (`InterfaceID.NotificationDisplay`, group 660) so
+only its own panel shows. The details below were established by instrumenting real unlocks — they are
+not obvious from the code, and getting them wrong silently breaks users' screenshots.
+
+**Never disable the game's popup setting to hide the popup.** RuneLite's bundled `ScreenshotPlugin`
+captures collection log entries two mutually exclusive ways:
+
+- `onScriptPreFired` on `NOTIFICATION_DELAY` (3347), which runs *after* the popup's open animation —
+  late enough that this plugin's ~950 ms fold+icon-pop has finished, so the panel is fully drawn.
+- `onChatMessage`, gated on `VarbitID.OPTION_COLLECTION_NEW_ITEM == 1` (popup-disabled mode), which
+  fires immediately — about a second too early, capturing a blank or half-folded panel.
+
+Leaving the popup setting enabled (the varbit reads 3 when chat + popup are both on) keeps the good
+path live and the chat path dormant, so exactly one well-timed screenshot fires.
+
+**Only hide widgets that paint.** The open animation is the script *resizing* the layout widgets:
+`UNIVERSE` stays 178x100 while `CONTAINER`/`CONTENT` grow from 1x2 to full size across ~70
+`NOTIFICATION_START` iterations, and `NOTIFICATION_DELAY` only fires once that completes. Hiding
+`UNIVERSE` or `CONTAINER` stalls the progression, so the screenshot never happens. Hide only
+`BACKGROUND`, `FRAME`, `TITLE`, `TITLE_TEXT`, `MAIN`, `MAIN_TEXT` — plus their **dynamic children**,
+since the frame is drawn as eight of them and they keep painting when only the parent is hidden.
+
+**Always scope by notification title.** The notification display is shared with combat achievement and
+league task popups, which must stay visible. These genuinely overlap — one kill can complete a combat
+task and fill a collection log slot in the same second — so the title check is what keeps the hide off
+other notifications. `ScreenshotPlugin` matches the same string.
+
+**Reassert every frame** (`BeforeRender`). The interface is rebuilt per notification and resized
+throughout its animation; a one-shot hide gets undone.
+
+---
+
 # Plugin Rules & Restrictions
 
 Features that are **forbidden or restricted** in RuneLite hub plugins.

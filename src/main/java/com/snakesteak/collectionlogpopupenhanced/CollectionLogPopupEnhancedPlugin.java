@@ -17,9 +17,14 @@ import java.util.regex.Pattern;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.Client;
+import net.runelite.api.events.BeforeRender;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarClientID;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
@@ -41,6 +46,24 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	// name> [kc]" runs a specific name through the real detection pipeline, optionally forcing a kill
 	// count. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
+
+	// Matched against VarClientID.NOTIFICATION_TITLE to tell our notification apart from the combat
+	// task and league task ones that share the same widget. Same string ScreenshotPlugin matches on.
+	private static final String COLLECTION_LOG_NOTIFICATION_TITLE = "Collection log";
+
+	// The notification's painted widgets. UNIVERSE, CONTAINER and CONTENT are excluded on purpose -
+	// the open animation resizes those, and hiding one stalls it before the screenshot fires.
+	private static final int[] NATIVE_POPUP_PAINT_COMPONENTS = {
+		InterfaceID.NotificationDisplay.BACKGROUND,
+		InterfaceID.NotificationDisplay.FRAME,
+		InterfaceID.NotificationDisplay.TITLE,
+		InterfaceID.NotificationDisplay.TITLE_TEXT,
+		InterfaceID.NotificationDisplay.MAIN,
+		InterfaceID.NotificationDisplay.MAIN_TEXT,
+	};
+
+	@Inject
+	private Client client;
 
 	@Inject
 	private ItemManager itemManager;
@@ -95,7 +118,57 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		eventBus.unregister(killCountTracker);
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
+		// Only ever undoes this plugin's own hide - never something the game hid.
+		setNativePopupPaintHidden(false);
 		log.debug("Collection Log Popup Enhanced stopped!");
+	}
+
+	/**
+	 * Hides the game's own collection log popup, leaving the game's popup setting itself enabled so
+	 * RuneLite's Screenshot plugin still captures the unlock on its well-timed path.
+	 *
+	 * Reasserted every frame because the notification is rebuilt and resized continuously while it
+	 * opens, which would undo a one-shot hide.
+	 */
+	@Subscribe
+	public void onBeforeRender(BeforeRender beforeRender)
+	{
+		if (!COLLECTION_LOG_NOTIFICATION_TITLE.equalsIgnoreCase(client.getVarcStrValue(VarClientID.NOTIFICATION_TITLE)))
+		{
+			return;
+		}
+
+		setNativePopupPaintHidden(true);
+	}
+
+	/**
+	 * Dynamic children are toggled too - the frame is drawn as eight of them (its corners and edges),
+	 * which keep painting on their own when only the parent is hidden.
+	 */
+	private void setNativePopupPaintHidden(boolean hidden)
+	{
+		for (int componentId : NATIVE_POPUP_PAINT_COMPONENTS)
+		{
+			Widget widget = client.getWidget(componentId);
+			if (widget == null)
+			{
+				continue;
+			}
+
+			widget.setHidden(hidden);
+
+			Widget[] children = widget.getDynamicChildren();
+			if (children != null)
+			{
+				for (Widget child : children)
+				{
+					if (child != null)
+					{
+						child.setHidden(hidden);
+					}
+				}
+			}
+		}
 	}
 
 	@Subscribe

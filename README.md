@@ -2,10 +2,12 @@
 Displays a popup and (optional) sound effect based on rarity on new collection logs.
 
 # Setup
-In settings menu, 
-1. enable 'Collection log - New addition notification'
-2. enable 'Collection log - New addition popup'
+In settings menu, enable:
+1. 'Collection log - New addition notification'
+2. 'Collection log - New addition popup'
 ![alt text](clogSettings.png)
+
+At the bottom of the page is an explaination of why the native popup has to be active even though we use our own popup.
 
 # Default visuals
 ![img_1.png](img_1.png)
@@ -41,7 +43,7 @@ Each has a different popup style and color scheme. You can customize rarity tier
 ### Scaling
 You can also scale the popup and set text-rendering to what looks good to you. Crisp text looks best at higher scale, smooth at lower.
 
-Keep in mind that the popup might not cover the build-in popup on when set too small. (Build-in needs to be active if you wish screenshots to wait for the popup to be fully open)
+The native popup is hidden for any clog unlocked so only the enhanced panel shows. (Combat achievements will still show with the default popup and are not hidden).
 
 ![alt text](appearances_settings.png)
 
@@ -73,6 +75,11 @@ Want to use your own sound effects instead? Place any or all '.wav' files into '
 
 And it will use your sound instead! (See 'Testing' on how to test if your audio works)
 (Note: if it doesn't play a sound and the spelling is correct, your audio file is not supported, try another.)
+
+# Native popups and screenshots
+The native popup (the default one in the official client) has to be active in runescape settings, as the build in screenshot tool (taking a screenshot upon getting a new collection log) actually waits for the panel to be fully open, but only when this toggle is active. 
+Even though the toggle has to be active, the native popup is hidden by the plugin so only the enhanced popup is shown.
+
 
 # Thanks to:
 C engineer plugin for collection log slot popup tie ins.

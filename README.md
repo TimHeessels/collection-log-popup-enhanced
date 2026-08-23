@@ -15,7 +15,7 @@ In settings menu,
 ![alt text](image-3.png)
 
 # Testing
-To test the popup without having to unlock a new collection log, select any tier in the 'preview popup' dropdown. This will show the popup as if you got a random item from that tier. 
+To test the popup without having to unlock a new collection log, select any tier in the 'preview popup' dropdown. This will show the popup as if you got a random item from that tier.
 
 (Don't forget to turn it off again when you're done testing)
 
@@ -71,7 +71,7 @@ Want to use your own sound effects instead? Place any or all '.wav' files into '
 - `very_rare.wav`
 - `pet.wav`
 
-And it will use your sound instead! (See 'Appearance' on how to test if your audio works)
+And it will use your sound instead! (See 'Testing' on how to test if your audio works)
 (Note: if it doesn't play a sound and the spelling is correct, your audio file is not supported, try another.)
 
 # Thanks to:

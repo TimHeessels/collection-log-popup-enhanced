@@ -61,7 +61,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "rarityBasis",
 		name = "Rarity based on",
-		description = "Whether an item's tier comes from its value, its wiki completion percentage, or a blend of both",
+		description = "What the rarity tiers are based on.",
 		position = 0,
 		section = raritySection
 	)
@@ -154,7 +154,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledCommon",
 		name = "Play audio effect for common items",
-		description = "Play a sound effect when a new Common-tier collection log item is unlocked",
+		description = "Play a sound effect on common collection logs slots.",
 		section = audioSection,
 		position = 1
 	)
@@ -167,7 +167,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeCommon",
 		name = "Common volume",
-		description = "Volume of the Common-tier sound effect, 0-100. Also applies to a custom common.wav",
+		description = "Volume of the Common-tier sound effect, 0-100.",
 		section = audioSection,
 		position = 2
 	)
@@ -179,7 +179,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledUncommon",
 		name = "Play audio effect for uncommon items",
-		description = "Play a sound effect when a new Uncommon-tier collection log item is unlocked",
+		description = "Play a sound effect on uncommon collection logs slots.",
 		section = audioSection,
 		position = 3
 	)
@@ -192,7 +192,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeUncommon",
 		name = "Uncommon volume",
-		description = "Volume of the Uncommon-tier sound effect, 0-100. Also applies to a custom uncommon.wav",
+		description = "Volume of the Uncommon-tier sound effect, 0-100.",
 		section = audioSection,
 		position = 4
 	)
@@ -204,7 +204,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledRare",
 		name = "Play audio effect for rare items",
-		description = "Play a sound effect when a new Rare-tier collection log item is unlocked",
+		description = "Play a sound effect on rare collection logs slots.",
 		section = audioSection,
 		position = 5
 	)
@@ -217,7 +217,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeRare",
 		name = "Rare volume",
-		description = "Volume of the Rare-tier sound effect, 0-100. Also applies to a custom rare.wav",
+		description = "Volume of the Rare-tier sound effect, 0-100.",
 		section = audioSection,
 		position = 6
 	)
@@ -229,7 +229,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundEnabledVeryRare",
 		name = "Play audio effect for very rare items",
-		description = "Play a sound effect when a new Very rare-tier collection log item is unlocked",
+		description = "Play a sound effect on very-rare collection logs slots.",
 		section = audioSection,
 		position = 7
 	)
@@ -242,7 +242,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeVeryRare",
 		name = "Very rare volume",
-		description = "Volume of the Very rare-tier sound effect, 0-100. Also applies to a custom very_rare.wav",
+		description = "Volume of the Very rare-tier sound effect, 0-100.",
 		section = audioSection,
 		position = 8
 	)
@@ -279,7 +279,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "showProgressBar",
 		name = "Show progress bar",
-		description = "Fill the bar across the popup to show your overall collection log completion. When off, the bar stays empty and reads as a plain divider",
+		description = "Show your clog progress in the center bar.",
 		section = appearanceSection
 	)
 	default boolean showProgressBar()
@@ -398,7 +398,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "backgroundDarkness",
 		position = 5,
 		name = "Background darkness (%)",
-		description = "How dark the panel background is relative to its tier colour. Lower is darker",
+		description = "How dark the panel background is relative to its tier colour.",
 		section = coloursSection
 	)
 	default int backgroundDarkness()

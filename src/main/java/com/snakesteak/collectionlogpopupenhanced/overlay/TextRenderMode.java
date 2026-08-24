@@ -7,9 +7,9 @@ package com.snakesteak.collectionlogpopupenhanced.overlay;
  */
 public enum TextRenderMode
 {
-	CRISP("Crisp (pixel-hinted)"),
-	SMOOTH("Smooth (antialiased)"),
-	SMOOTH_OUTLINED("Smooth with outline");
+	CRISP("Pixel"),
+	SMOOTH("Smooth"),
+	SMOOTH_OUTLINED("Smooth outlined");
 
 	private final String label;
 

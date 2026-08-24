@@ -17,7 +17,7 @@ At the bottom of the page is an explaination of why the native popup has to be a
 ![alt text](image-3.png)
 
 # Testing
-To test the popup without having to unlock a new collection log, select any tier in the 'preview popup' dropdown. This will show the popup as if you got a random item from that tier.
+To test the popup without having to unlock a new collection log, select any tier (or random) in the 'preview popup' dropdown. This will show the popup as if you got an item from that tier.
 
 (Don't forget to turn it off again when you're done testing)
 
@@ -45,27 +45,35 @@ You can also scale the popup and set text-rendering to what looks good to you. C
 
 The native popup is hidden for any clog unlocked so only the enhanced panel shows. (Combat achievements will still show with the default popup and are not hidden).
 
-![alt text](appearances_settings.png)
+![alt text](appearance_settings.png)
 
 ### Colors
 Each tier has it's own color, which you can customize in the color section of the config, alognside text colors.
 
 ![alt text](color_settings.png)
 
+### Progress bar
+The center bar depicts your progress towards collecting all collection log items. This can be toggled in settings.
+
+
 # Statistics
-At the bottom left and right of the panel statistics are displayed (configurable in setting). These values can be :
-- KC at which you got the item 
--- if no KC is available, it falls back to showing comp%
-- Completion 
--- based on how many other players have this item (https://oldschool.runescape.wiki/w/Collection_log/Table)
-- Drop rate
--- Shows drop rate of the item if available. Falls back to value if not.
-- Value of the item
--- G.E or High alch price.
+At the bottom left and right of the panel statistics are displayed (configurable in setting). These values can be:
+* Kill count - KC at which you got the item - if no KC is available it will show completion instead
+* Completion - based on how many other players have this item (https://oldschool.runescape.wiki/w/Collection_log/Table)
+* Droprate - Shows drop rate of the item if available. If no droprate available it will show value instead.
+* Value - G.E or High alch price.
 
 ![alt text](statistics_settings.png)
 
-# Custom sounds
+# Audio
+
+### Volume
+You can set volume or disable audio for each tier.<br>
+When multiple collections are logged at the same time audio plays for each popup. Select bulk unlock SFX to play only the first audio effect.
+
+![alt text](audio_settings.png)
+
+### Custom sounds
 Want to use your own sound effects instead? Place any or all '.wav' files into '.runelite/collection-log-popup-enhanced/sounds/', using these exact filenames:
 - `common.wav`
 - `uncommon.wav`
@@ -79,7 +87,6 @@ And it will use your sound instead! (See 'Testing' on how to test if your audio 
 # Native popups and screenshots
 The native popup (the default one in the official client) has to be active in runescape settings, as the build in screenshot tool (taking a screenshot upon getting a new collection log) actually waits for the panel to be fully open, but only when this toggle is active. 
 Even though the toggle has to be active, the native popup is hidden by the plugin so only the enhanced popup is shown.
-
 
 # Thanks to:
 C engineer plugin for collection log slot popup tie ins.

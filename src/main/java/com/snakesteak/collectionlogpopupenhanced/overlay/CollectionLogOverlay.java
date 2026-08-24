@@ -32,6 +32,7 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Value;
 import net.runelite.api.Client;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.overlay.Overlay;
@@ -63,7 +64,7 @@ public class CollectionLogOverlay extends Overlay
 	private static final int BASE_ICON_SPRITE_X_OFFSET = 3;
 
 	// Bottom-left / bottom-right stacked label+value blocks, clear of the icon's horizontal footprint
-	// and below the divider line baked into the (now vertically-flipped) background art at y=70-71.
+	// and below the progress bar.
 	private static final int BASE_CORNER_PADDING_X = 16;
 	private static final int BASE_CORNER_LABEL_BASELINE_Y = 93;
 	private static final int BASE_CORNER_VALUE_BASELINE_Y = 116;
@@ -74,11 +75,28 @@ public class CollectionLogOverlay extends Overlay
 	private static final int BASE_CORNER_MULTI_VALUE_LINE_HEIGHT = 16;
 	private static final float BASE_CORNER_MULTI_VALUE_FONT_SIZE = 14f;
 
-	// Item name - centered, below the caption and above the baked-in divider. Baseline is the first
-	// of up to 2 lines, so a wrapped name's second line (see #fitName) still clears the divider.
+	// Item name - centered, below the caption and above the progress bar. Always a single line; names
+	// too wide to fit are shrunk, then ellipsised (see #fitName).
 	private static final int BASE_NAME_BASELINE_Y = 48;
-	private static final int BASE_NAME_LINE_HEIGHT = 20;
 	private static final int BASE_NAME_SIDE_MARGIN = 16;
+
+	// Total collection log progress bar, drawn in the band the art used to carry a plain divider line
+	// (which sat at y=69-70, and has since been removed from the source PNGs).
+	//
+	// Centered in the gap between the item name and the corner stats: the name is always one line (see
+	// #fitName) with descender ink ending at y=51, and the stat labels' ink starts at y=81. 2px - the
+	// old divider line's height - is too thin to read as a fill against a track, hence 3.
+	private static final int BASE_PROGRESS_BAR_TOP_Y = 64;
+	private static final int BASE_PROGRESS_BAR_HEIGHT = 3;
+	// Matches the inset the divider line had (~6% of the panel's width per side). Derived from
+	// panelWidth rather than a fixed x so it stays centered across both source art widths - panels 4
+	// and Pet are 380px wide against the others' 379, which also left the old line 1px off-center.
+	private static final float PROGRESS_BAR_SIDE_INSET_FRACTION = 0.0607f;
+	// How dark the unfilled track is relative to the panel body. Reuses the same derivation the body
+	// uses (see PanelRecolorer#deriveBackground) at a fraction of the configured darkness, so the
+	// track stays in the tier's colour family and still separates from the body at either end of the
+	// darkness range.
+	private static final float PROGRESS_BAR_TRACK_DARKNESS_SCALE = 0.5f;
 
 	private static final String CAPTION_TEXT = "Collection log slot";
 	private static final int BASE_CAPTION_BASELINE_Y = 22;
@@ -116,6 +134,12 @@ public class CollectionLogOverlay extends Overlay
 	// What actually gets drawn - the source art recoloured to the configured per-tier colours.
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
+	// The progress bar's unfilled track, per tier. Deliberately a step darker than the panel body
+	// (which is what PanelRecolorer#deriveBackground returns) - at the same shade the track would be
+	// invisible against the panel and the bar would read as a floating stripe rather than a fill
+	// inside a recess. Cached alongside the art because it's derived from the same inputs and would
+	// otherwise be recomputed every frame.
+	private final Map<RarityTier, Color> progressBarTrackColors = new EnumMap<>(RarityTier.class);
 
 	// Only ever written/read from the client thread, so no synchronization is needed.
 	private final Deque<PendingItem> queue = new ArrayDeque<>();
@@ -144,9 +168,12 @@ public class CollectionLogOverlay extends Overlay
 	private int cornerMultiValueLineHeight;
 	private int cornerTextMaxWidth;
 	private int nameBaselineY;
-	private int nameLineHeight;
 	private int nameSideMargin;
 	private int captionBaselineY;
+	private int progressBarTopY;
+	private int progressBarHeight;
+	private int progressBarX;
+	private int progressBarWidth;
 	private float nameFontMinSize;
 	private Font cornerLabelFont;
 	private Font cornerValueFont;
@@ -213,11 +240,16 @@ public class CollectionLogOverlay extends Overlay
 		cornerTextMaxWidth = iconX - cornerPaddingX;
 
 		nameBaselineY = Math.round(BASE_NAME_BASELINE_Y * scale);
-		nameLineHeight = Math.round(BASE_NAME_LINE_HEIGHT * scale);
 		nameSideMargin = Math.round(BASE_NAME_SIDE_MARGIN * scale);
 		nameFontMinSize = BASE_NAME_FONT_MIN_SIZE * scale;
 
 		captionBaselineY = Math.round(BASE_CAPTION_BASELINE_Y * scale);
+
+		progressBarTopY = Math.round(BASE_PROGRESS_BAR_TOP_Y * scale);
+		// At least 1px so the bar never vanishes entirely at the smallest configured scale.
+		progressBarHeight = Math.max(1, Math.round(BASE_PROGRESS_BAR_HEIGHT * scale));
+		progressBarX = Math.round(panelWidth * PROGRESS_BAR_SIDE_INSET_FRACTION);
+		progressBarWidth = panelWidth - 2 * progressBarX;
 
 		cornerLabelFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CORNER_LABEL_FONT_SIZE * scale);
 		cornerValueFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CORNER_VALUE_FONT_SIZE * scale);
@@ -261,6 +293,8 @@ public class CollectionLogOverlay extends Overlay
 			Color background = PanelRecolorer.deriveBackground(border, darkness);
 			backgrounds.put(tier, PanelRecolorer.recolor(sourceBackgrounds.get(tier), tier, border, background));
 			iconFrames.put(tier, PanelRecolorer.recolor(sourceIconFrames.get(tier), tier, border, background));
+			progressBarTrackColors.put(tier,
+				PanelRecolorer.deriveBackground(border, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
 		}
 		lastColours = colours;
 	}
@@ -496,15 +530,11 @@ public class CollectionLogOverlay extends Overlay
 
 		int maxNameWidth = panelWidth - 2 * nameSideMargin;
 		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth, nameFontMinSize);
-		Color nameColor = tierColor(current.getTier());
-		int nameY = nameBaselineY;
-		for (String line : fittedName.getLines())
-		{
-			graphics.setFont(fittedName.getFont());
-			int lineX = (panelWidth - graphics.getFontMetrics().stringWidth(line)) / 2;
-			drawOutlinedString(graphics, line, lineX, nameY, nameColor);
-			nameY += nameLineHeight;
-		}
+		graphics.setFont(fittedName.getFont());
+		int nameX = (panelWidth - graphics.getFontMetrics().stringWidth(fittedName.getText())) / 2;
+		drawOutlinedString(graphics, fittedName.getText(), nameX, nameBaselineY, tierColor(current.getTier()));
+
+		drawProgressBar(graphics);
 
 		FontMetrics cornerLabelMetrics = graphics.getFontMetrics(cornerLabelFont);
 		FontMetrics cornerValueMetrics = graphics.getFontMetrics(cornerValueFont);
@@ -522,6 +552,60 @@ public class CollectionLogOverlay extends Overlay
 			// edge, since the label is usually much shorter than the value.
 			drawCornerStat(graphics, rightStat, panelWidth - cornerPaddingX, true, cornerLabelMetrics, cornerValueMetrics);
 		}
+	}
+
+	/**
+	 * Draws overall collection log completion - every slot the account has unlocked, across the whole
+	 * log - as a filled track in the band the art's divider line used to occupy.
+	 *
+	 * <p>Both counts come straight from the server-pushed varps, so they're populated from login
+	 * onwards with no need for the player to have opened the collection log, and involve no item name
+	 * matching or bundled wiki data. That's what makes this safe to show on every popup, unlike
+	 * per-page progress: the unlock chat message never says which page an item landed in, and many
+	 * items belong to several pages, so a per-page figure couldn't be attributed reliably.
+	 *
+	 * <p>With the bar switched off in config the empty track is still drawn, standing in for the
+	 * divider line the panel art used to carry - visually identical to an account with nothing
+	 * unlocked.
+	 *
+	 * <p>Drawn with {@code fillRect} rather than a stroked or rounded shape on purpose - shape
+	 * antialiasing is never enabled here, and {@code STROKE_PURE} is only set in the two SMOOTH text
+	 * modes (see #render), so anything stroked would rasterize differently between text modes.
+	 * Deliberately does not touch the composite: it inherits the panel's fold transform and fade from
+	 * the caller, and setting its own would clobber the fade-out.
+	 */
+	private void drawProgressBar(Graphics2D graphics)
+	{
+		// The track is drawn either way: with the bar turned off it stands in for the divider line the
+		// panel art used to carry, which looks the same as a bar at 0%.
+		graphics.setColor(progressBarTrackColors.get(current.getTier()));
+		graphics.fillRect(progressBarX, progressBarTopY, progressBarWidth, progressBarHeight);
+
+		if (!config.showProgressBar())
+		{
+			return;
+		}
+
+		int obtained = client.getVarpValue(VarPlayerID.COLLECTION_COUNT);
+		int total = client.getVarpValue(VarPlayerID.COLLECTION_COUNT_MAX);
+
+		// total is 0 before the varps have been populated (e.g. a preview fired on the login screen),
+		// which would otherwise divide by zero - leave the empty track showing, since a bar at 0% still
+		// looks deliberate.
+		if (total <= 0)
+		{
+			return;
+		}
+
+		float progress = clamp01(obtained / (float) total);
+		int filledWidth = Math.round(progressBarWidth * progress);
+		if (filledWidth <= 0)
+		{
+			return;
+		}
+
+		graphics.setColor(tierColor(current.getTier()));
+		graphics.fillRect(progressBarX, progressBarTopY, filledWidth, progressBarHeight);
 	}
 
 	/**
@@ -605,63 +689,23 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * Wraps the item name onto up to 2 lines, shrinking the font (down to {@code minFontSize}) if it
-	 * still doesn't fit. Any overflow left after that is truncated with an ellipsis.
+	 * Fits the item name on a single line, shrinking the font (down to {@code minFontSize}) until it
+	 * does. Anything still too wide at the minimum size is truncated with an ellipsis.
+	 *
+	 * <p>Deliberately never wraps. Only 28 of the ~1700 collection log item names are wide enough to
+	 * need it, but allowing a second line forces everything below - the progress bar and the corner
+	 * stats - to leave room for a line that almost never appears, which reads as a gap on every other
+	 * popup. Shrinking those few names instead keeps the layout below the name fixed.
 	 */
 	private static FittedName fitName(Graphics2D graphics, String text, Font baseFont, int maxWidth, float minFontSize)
 	{
 		Font font = baseFont;
-		List<String> lines;
-		while (true)
+		while (graphics.getFontMetrics(font).stringWidth(text) > maxWidth && font.getSize2D() > minFontSize)
 		{
-			FontMetrics metrics = graphics.getFontMetrics(font);
-			if (metrics.stringWidth(text) <= maxWidth)
-			{
-				lines = List.of(text);
-				break;
-			}
-
-			lines = wrapToTwoLines(metrics, text, maxWidth);
-			boolean secondLineFits = lines.size() < 2 || metrics.stringWidth(lines.get(1)) <= maxWidth;
-			if (secondLineFits || font.getSize2D() <= minFontSize)
-			{
-				break;
-			}
 			font = font.deriveFont(font.getSize2D() - 1f);
 		}
 
-		if (lines.size() == 2 && graphics.getFontMetrics(font).stringWidth(lines.get(1)) > maxWidth)
-		{
-			lines = List.of(lines.get(0), truncate(graphics, lines.get(1), font, maxWidth));
-		}
-		return new FittedName(font, lines);
-	}
-
-	/**
-	 * Greedily fills the first line with whole words up to maxWidth; everything left over (however
-	 * much doesn't fit) goes on the second line.
-	 */
-	private static List<String> wrapToTwoLines(FontMetrics metrics, String text, int maxWidth)
-	{
-		String[] words = text.split(" ");
-		StringBuilder firstLine = new StringBuilder();
-		int splitIndex = words.length;
-		for (int i = 0; i < words.length; i++)
-		{
-			String candidate = firstLine.length() == 0 ? words[i] : firstLine + " " + words[i];
-			if (firstLine.length() > 0 && metrics.stringWidth(candidate) > maxWidth)
-			{
-				splitIndex = i;
-				break;
-			}
-			firstLine = new StringBuilder(candidate);
-		}
-
-		if (splitIndex == words.length)
-		{
-			return List.of(firstLine.toString());
-		}
-		return List.of(firstLine.toString(), String.join(" ", Arrays.copyOfRange(words, splitIndex, words.length)));
+		return new FittedName(font, truncate(graphics, text, font, maxWidth));
 	}
 
 	private static String truncate(Graphics2D graphics, String text, Font font, int maxWidth)
@@ -862,7 +906,7 @@ public class CollectionLogOverlay extends Overlay
 	private static class FittedName
 	{
 		Font font;
-		List<String> lines;
+		String text;
 	}
 
 	@Value

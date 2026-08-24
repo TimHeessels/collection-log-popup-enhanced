@@ -17,46 +17,46 @@ import net.runelite.client.config.Range;
 public interface CollectionLogPopupEnhancedConfig extends Config
 {
 	@ConfigSection(
+		name = "Preview",
+		description = "Preview the popup without waiting for an unlock",
+		position = 0
+	)
+	String previewSection = "previewSection";
+
+	@ConfigSection(
 		name = "Rarity",
 		description = "How an item's rarity tier is determined",
-		position = 0
+		position = 1
 	)
 	String raritySection = "raritySection";
 
 	@ConfigSection(
 		name = "Statistics",
 		description = "Statistics in bottom left and right of popup",
-		position = 1
+		position = 2
 	)
 	String overlaySection = "overlaySection";
 
 	@ConfigSection(
 		name = "Audio",
 		description = "Sound effects played on new collection log unlocks",
-		position = 2
+		position = 3
 	)
 	String audioSection = "audioSection";
 
 	@ConfigSection(
 		name = "Appearance",
 		description = "Tune to your liking",
-		position = 3
+		position = 4
 	)
 	String appearanceSection = "appearanceSection";
 
 	@ConfigSection(
 		name = "Colours",
 		description = "Border and background colour of the popup, per rarity tier",
-		position = 4
-	)
-	String coloursSection = "coloursSection";
-
-	@ConfigSection(
-		name = "Preview",
-		description = "Preview the popup without waiting for an unlock",
 		position = 5
 	)
-	String previewSection = "previewSection";
+	String coloursSection = "coloursSection";
 
 	@ConfigItem(
 		keyName = "rarityBasis",
@@ -274,6 +274,17 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	default int soundVolumePet()
 	{
 		return 65;
+	}
+
+	@ConfigItem(
+		keyName = "showProgressBar",
+		name = "Show progress bar",
+		description = "Fill the bar across the popup to show your overall collection log completion. When off, the bar stays empty and reads as a plain divider",
+		section = appearanceSection
+	)
+	default boolean showProgressBar()
+	{
+		return true;
 	}
 
 	@ConfigItem(

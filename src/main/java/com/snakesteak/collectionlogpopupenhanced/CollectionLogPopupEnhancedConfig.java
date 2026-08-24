@@ -143,7 +143,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "bulkUnlockSfx",
 		name = "Bulk unlock SFX",
 		description = "When multiple items unlock at once, play a single sound instead",
-		section = audioSection
+		section = audioSection,
+		position = 0
 	)
 	default boolean bulkUnlockSfx()
 	{
@@ -154,51 +155,108 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "soundEnabledCommon",
 		name = "Play audio effect for common items",
 		description = "Play a sound effect when a new Common-tier collection log item is unlocked",
-		section = audioSection
+		section = audioSection,
+		position = 1
 	)
 	default boolean soundEnabledCommon()
 	{
 		return true;
 	}
 
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = "soundVolumeCommon",
+		name = "Common volume",
+		description = "Volume of the Common-tier sound effect, 0-100. Also applies to a custom common.wav",
+		section = audioSection,
+		position = 2
+	)
+	default int soundVolumeCommon()
+	{
+		return 65;
+	}
+
 	@ConfigItem(
 		keyName = "soundEnabledUncommon",
 		name = "Play audio effect for uncommon items",
 		description = "Play a sound effect when a new Uncommon-tier collection log item is unlocked",
-		section = audioSection
+		section = audioSection,
+		position = 3
 	)
 	default boolean soundEnabledUncommon()
 	{
 		return true;
 	}
 
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = "soundVolumeUncommon",
+		name = "Uncommon volume",
+		description = "Volume of the Uncommon-tier sound effect, 0-100. Also applies to a custom uncommon.wav",
+		section = audioSection,
+		position = 4
+	)
+	default int soundVolumeUncommon()
+	{
+		return 65;
+	}
+
 	@ConfigItem(
 		keyName = "soundEnabledRare",
 		name = "Play audio effect for rare items",
 		description = "Play a sound effect when a new Rare-tier collection log item is unlocked",
-		section = audioSection
+		section = audioSection,
+		position = 5
 	)
 	default boolean soundEnabledRare()
 	{
 		return true;
 	}
 
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = "soundVolumeRare",
+		name = "Rare volume",
+		description = "Volume of the Rare-tier sound effect, 0-100. Also applies to a custom rare.wav",
+		section = audioSection,
+		position = 6
+	)
+	default int soundVolumeRare()
+	{
+		return 65;
+	}
+
 	@ConfigItem(
 		keyName = "soundEnabledVeryRare",
 		name = "Play audio effect for very rare items",
 		description = "Play a sound effect when a new Very rare-tier collection log item is unlocked",
-		section = audioSection
+		section = audioSection,
+		position = 7
 	)
 	default boolean soundEnabledVeryRare()
 	{
 		return true;
 	}
 
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = "soundVolumeVeryRare",
+		name = "Very rare volume",
+		description = "Volume of the Very rare-tier sound effect, 0-100. Also applies to a custom very_rare.wav",
+		section = audioSection,
+		position = 8
+	)
+	default int soundVolumeVeryRare()
+	{
+		return 65;
+	}
+
 	@ConfigItem(
 		keyName = "soundEnabledPet",
 		name = "Play audio effect for pets",
 		description = "Play a sound effect when a new pet is unlocked",
-		section = audioSection
+		section = audioSection,
+		position = 9
 	)
 	default boolean soundEnabledPet()
 	{
@@ -207,12 +265,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@Range(min = 0, max = 100)
 	@ConfigItem(
-		keyName = "soundVolume",
-		name = "Sound volume",
-		description = "Volume of the collection log sound effects, 0-100",
-		section = audioSection
+		keyName = "soundVolumePet",
+		name = "Pet volume",
+		description = "Volume of the pet sound effect, 0-100. Also applies to a custom pet.wav",
+		section = audioSection,
+		position = 10
 	)
-	default int soundVolume()
+	default int soundVolumePet()
 	{
 		return 65;
 	}

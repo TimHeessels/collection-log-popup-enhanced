@@ -19,6 +19,9 @@ import net.runelite.client.audio.AudioPlayer;
  * <p>Users can override any tier's bundled clip by placing a same-named .wav in
  * {@link #SOUNDS_DIR}, mirroring the override pattern core's own Notifier uses for the
  * notification sound.
+ *
+ * <p>Volume is configured per tier and applied as a playback gain rather than baked into the
+ * clips, so a tier's slider governs its override .wav just as it does the bundled one.
  */
 @Slf4j
 @Singleton
@@ -53,7 +56,8 @@ public class SoundManager
 
 	public void play(RarityTier tier)
 	{
-		if (!isEnabled(tier) || config.soundVolume() <= 0)
+		int volume = volume(tier);
+		if (!isEnabled(tier) || volume <= 0)
 		{
 			return;
 		}
@@ -65,7 +69,7 @@ public class SoundManager
 			File override = new File(SOUNDS_DIR, filename);
 			if (override.isFile())
 			{
-				audioPlayer.play(override, gain(config.soundVolume()));
+				audioPlayer.play(override, gain(volume));
 				return;
 			}
 
@@ -76,7 +80,7 @@ public class SoundManager
 				return;
 			}
 
-			audioPlayer.play(SoundManager.class, resource, gain(config.soundVolume()));
+			audioPlayer.play(SoundManager.class, resource, gain(volume));
 		}
 		catch (Exception e)
 		{
@@ -107,6 +111,25 @@ public class SoundManager
 				return config.soundEnabledPet();
 			default:
 				return false;
+		}
+	}
+
+	private int volume(RarityTier tier)
+	{
+		switch (tier)
+		{
+			case COMMON:
+				return config.soundVolumeCommon();
+			case UNCOMMON:
+				return config.soundVolumeUncommon();
+			case RARE:
+				return config.soundVolumeRare();
+			case VERY_RARE:
+				return config.soundVolumeVeryRare();
+			case PET:
+				return config.soundVolumePet();
+			default:
+				return 0;
 		}
 	}
 }

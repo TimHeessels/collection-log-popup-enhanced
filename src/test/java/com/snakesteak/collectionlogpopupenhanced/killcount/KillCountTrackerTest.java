@@ -158,4 +158,149 @@ public class KillCountTrackerTest
 
 		assertNull(tracker.killCountFor(List.of("Callisto and Artio")));
 	}
+
+	@Test
+	public void parsesYamaSuccessCountAsKillCount()
+	{
+		// Yama's kills are tracked as a "success count" rather than a "kill count" - see
+		// https://oldschool.runescape.wiki/w/Yama#Trivia
+		fireMessage("Your Yama success count is: <col=ff0000>241</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Yama"));
+		assertEquals("Yama success", kill.getSource());
+		assertEquals(241, kill.getKillCount());
+	}
+
+	@Test
+	public void parsesSubduedWintertodtCount()
+	{
+		fireMessage("Your subdued Wintertodt count is: <col=ff0000>12</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Wintertodt"));
+		assertEquals("subdued Wintertodt", kill.getSource());
+		assertEquals(12, kill.getKillCount());
+	}
+
+	@Test
+	public void parsesCompletedChambersOfXericCount()
+	{
+		fireMessage("Your completed Chambers of Xeric count is: <col=ff0000>5</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Chambers of Xeric"));
+		assertEquals("completed Chambers of Xeric", kill.getSource());
+		assertEquals(5, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesChambersOfXericChallengeModeAgainstBaseTab()
+	{
+		// Challenge Mode isn't tracked as a separate collection log source - the difficulty suffix
+		// must not prevent the match.
+		fireMessage("Your completed Chambers of Xeric Challenge Mode count is: <col=ff0000>3</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Chambers of Xeric"));
+		assertEquals("completed Chambers of Xeric Challenge Mode", kill.getSource());
+		assertEquals(3, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesTheatreOfBloodHardModeAgainstBaseTab()
+	{
+		fireMessage("Your completed Theatre of Blood: Hard Mode count is: <col=ff0000>2</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Theatre of Blood"));
+		assertEquals("completed Theatre of Blood: Hard Mode", kill.getSource());
+		assertEquals(2, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesTombsOfAmascutEntryModeAgainstBaseTab()
+	{
+		fireMessage("Your completed Tombs of Amascut: Entry Mode count is: <col=ff0000>1</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Tombs of Amascut"));
+		assertEquals("completed Tombs of Amascut: Entry Mode", kill.getSource());
+		assertEquals(1, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesTombsOfAmascutExpertModeAgainstBaseTab()
+	{
+		fireMessage("Your completed Tombs of Amascut: Expert Mode count is: <col=ff0000>107</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Tombs of Amascut"));
+		assertEquals("completed Tombs of Amascut: Expert Mode", kill.getSource());
+		assertEquals(107, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesFightCavesAgainstTzTokJadAlias()
+	{
+		fireMessage("Your TzTok-Jad kill count is: <col=ff0000>99</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Fight Caves"));
+		assertEquals("TzTok-Jad", kill.getSource());
+		assertEquals(99, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesInfernoAgainstTzKalZukAlias()
+	{
+		fireMessage("Your TzKal-Zuk kill count is: <col=ff0000>3</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Inferno"));
+		assertEquals("TzKal-Zuk", kill.getSource());
+		assertEquals(3, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesGauntletCompletionCount()
+	{
+		fireMessage("Your Gauntlet completion count is: <col=ff0000>10</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Gauntlet"));
+		assertEquals("Gauntlet completion", kill.getSource());
+		assertEquals(10, kill.getKillCount());
+	}
+
+	@Test
+	public void matchesCorruptedGauntletCompletionCountAgainstSameTab()
+	{
+		// The dataset has no separate "Corrupted Gauntlet" tab - both variants track under
+		// "The Gauntlet".
+		fireMessage("Your Corrupted Gauntlet completion count is: <col=ff0000>4</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Gauntlet"));
+		assertEquals("Corrupted Gauntlet completion", kill.getSource());
+		assertEquals(4, kill.getKillCount());
+	}
+
+	@Test
+	public void doesNotFalselyMatchUnrelatedSourceViaWholeWordSearch()
+	{
+		fireMessage("Your Vet'ion kill count is: <col=ff0000>7</col>.");
+
+		assertNull(tracker.killCountFor(List.of("Callisto and Artio")));
+	}
+
+	@Test
+	public void parsesDoomOfMokhaiotlDeepDelveCount()
+	{
+		fireMessage("Deep delves completed: <col=ff0000>42</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals("Doom of Mokhaiotl", kill.getSource());
+		assertEquals(42, kill.getKillCount());
+	}
+
+	@Test
+	public void ignoresDelveProgressMessagesBelowDeepDelveThreshold()
+	{
+		// Delve levels 1-7 don't carry any parseable count - matches the game's own HiScores, which
+		// don't show a kill count until 5 deep delves either. Not something the plugin can work around.
+		fireMessage("Delve level: 8 duration: 2:59. Personal best: 1:10");
+		fireMessage("Delve level 1 - 8 duration: 16:25. Personal best: 9:51");
+
+		assertNull(tracker.killCountFor(List.of("Doom of Mokhaiotl")));
+	}
 }

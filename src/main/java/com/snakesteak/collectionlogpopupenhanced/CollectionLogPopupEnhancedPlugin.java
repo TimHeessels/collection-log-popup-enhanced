@@ -3,6 +3,7 @@ package com.snakesteak.collectionlogpopupenhanced;
 import com.google.inject.Provides;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import com.snakesteak.collectionlogpopupenhanced.droprate.LocalDropRateDatasetLoader;
+import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountKind;
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
@@ -116,6 +117,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	{
 		eventBus.unregister(itemIdResolver);
 		eventBus.unregister(killCountTracker);
+		// Unregistering stops new messages, but the tracker is a @Singleton - Guice returns this same
+		// instance when the plugin is re-enabled, so the stored count has to be dropped explicitly.
+		killCountTracker.reset();
 		overlayManager.remove(collectionLogOverlay);
 		collectionLogOverlay.clear();
 		// Only ever undoes this plugin's own hide - never something the game hid.
@@ -124,11 +128,10 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	}
 
 	/**
-	 * Hides the game's own collection log popup, leaving the game's popup setting itself enabled so
-	 * RuneLite's Screenshot plugin still captures the unlock on its well-timed path.
-	 *
-	 * Reasserted every frame because the notification is rebuilt and resized continuously while it
-	 * opens, which would undo a one-shot hide.
+	 * Hides the game's own collection log popup. Reasserted every frame - the notification is rebuilt
+	 * and resized throughout its open animation, which undoes a one-shot hide.
+	 * <p>See "This Plugin: Native Popup & Screenshots" in AGENTS.md before changing what is hidden or
+	 * touching the game's popup setting - both silently break users' screenshots.
 	 */
 	@Subscribe
 	public void onBeforeRender(BeforeRender beforeRender)
@@ -177,20 +180,16 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		PreviewTier previewTier = config.previewTier();
 		if (previewTier != previousPreviewTier)
 		{
-			// Turned on, off, or switched to a different tier - dismiss whatever's currently
-			// showing/queued (e.g. a real unlock still mid-animation, or the previous tier's held
-			// preview item) so the next state starts from a clean slate. A held item also has a stale
-			// notificationStartMillis from whenever it first appeared, so its normal hold/fade timer
-			// (see CollectionLogOverlay#advance) would resume from an unpredictable point if left alone.
+			// Dismiss whatever's showing/queued so the next state starts clean. A held preview item
+			// also carries a stale notificationStartMillis, so its hold/fade timer (see
+			// CollectionLogOverlay#advance) would otherwise resume from an unpredictable point.
 			collectionLogOverlay.clear();
 		}
 		previousPreviewTier = previewTier;
 
-		// Triggers a random item of the selected tier as soon as preview mode is enabled (the overlay
-		// starts idle); the overlay then holds it on screen indefinitely instead of fading it out (see
-		// CollectionLogOverlay#advance), so this doesn't re-fire again until preview mode is toggled
-		// off/switched and back. Same test pipeline as the "::clogtest" dev command, just driven by the
-		// config option instead of a chat command so any user can preview.
+		// Fires once when preview mode is enabled; the overlay then holds the item indefinitely (see
+		// CollectionLogOverlay#advance), so this doesn't re-fire until preview is toggled or
+		// switched. Same pipeline as "::clogtest", driven by config so any user can preview.
 		if (previewTier != PreviewTier.NONE && collectionLogOverlay.isIdle())
 		{
 			if (previewTier == PreviewTier.RANDOM)
@@ -330,12 +329,14 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		RarityResult result = rarityResolver.resolve(itemId, itemName);
 
 		Integer killCount;
+		KillCountKind killCountKind;
 		String source;
 		if (forcedKillCount != null)
 		{
 			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill, so
-			// there's no known source either.
+			// there's no known source either, and the count is labelled as a plain kill count.
 			killCount = forcedKillCount;
+			killCountKind = KillCountKind.KILLS;
 			source = null;
 		}
 		else
@@ -346,6 +347,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			KillCountTracker.RecentKill kill = killCountTracker.killCountFor(candidateSources);
 
 			killCount = kill != null ? kill.getKillCount() : null;
+			killCountKind = kill != null ? kill.getKind() : null;
 			source = kill != null ? kill.getSource() : null;
 		}
 
@@ -358,18 +360,17 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			dropProbability = dropRateResolver.dropProbabilityByItemName(itemName);
 		}
-		// Without a single rate to show, a drop from more than one tracked source has no single rate to
-		// show - collect every candidate instead so the overlay can display them all (see
-		// CollectionLogOverlay).
+		// A drop from more than one tracked source has no single rate to show - collect every
+		// candidate instead so the overlay can display them all (see CollectionLogOverlay).
 		List<DropRateResolver.SourceRate> ambiguousDropRates = dropProbability == null
 			? dropRateResolver.dropRatesByItemName(itemName)
 			: List.of();
 
-		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {}, drop probability {}, ambiguous rates {})",
-			itemName, itemId, resolvedVia, result, killCount, dropProbability, ambiguousDropRates);
+		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {} {}, drop probability {}, ambiguous rates {})",
+			itemName, itemId, resolvedVia, result, killCount, killCountKind, dropProbability, ambiguousDropRates);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getAlchPrice(), result.getCompPercent(), killCount, dropProbability, ambiguousDropRates);
+			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, dropProbability, ambiguousDropRates);
 	}
 
 	@Provides

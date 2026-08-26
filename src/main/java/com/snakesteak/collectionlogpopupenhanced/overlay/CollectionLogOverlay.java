@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced.overlay;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
+import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountKind;
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityTier;
 import com.snakesteak.collectionlogpopupenhanced.sound.SoundManager;
@@ -112,9 +113,8 @@ public class CollectionLogOverlay extends Overlay
 	private static final float BASE_NAME_FONT_MIN_SIZE = 13f;
 	private static final float BASE_CAPTION_FONT_SIZE = 16f;
 
-	// Fold-open (panel scaleY, pivoted at its top edge) plays first; the icon pop (its own
-	// scale+fade, pivoted at its own center) starts exactly when the fold ends. Hold length is
-	// user-configurable (see config.overlayDisplaySeconds()). Fade-out is the only closing animation.
+	// Fold-open (panel scaleY) plays first; the icon pop (its own scale+fade) starts exactly when
+	// the fold ends. Both pivot at their own center. Fade-out is the only closing animation.
 	private static final long FOLD_MILLIS = 550;
 	private static final long ICON_POP_MILLIS = 400;
 	private static final long FADE_MILLIS = 400;
@@ -134,11 +134,8 @@ public class CollectionLogOverlay extends Overlay
 	// What actually gets drawn - the source art recoloured to the configured per-tier colours.
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
-	// The progress bar's unfilled track, per tier. Deliberately a step darker than the panel body
-	// (which is what PanelRecolorer#deriveBackground returns) - at the same shade the track would be
-	// invisible against the panel and the bar would read as a floating stripe rather than a fill
-	// inside a recess. Cached alongside the art because it's derived from the same inputs and would
-	// otherwise be recomputed every frame.
+	// A step darker than the panel body: at the same shade the bar reads as a floating stripe rather
+	// than a fill inside a recess. Cached alongside the art - same inputs, and otherwise per-frame.
 	private final Map<RarityTier, Color> progressBarTrackColors = new EnumMap<>(RarityTier.class);
 
 	// Only ever written/read from the client thread, so no synchronization is needed.
@@ -260,12 +257,8 @@ public class CollectionLogOverlay extends Overlay
 		lastScalePercent = scalePercent;
 	}
 
-	/**
-	 * Builds the cache key #render compares against to decide whether the panel art needs rebuilding:
-	 * every configured tier colour plus the background darkness. Purely a change detector - the
-	 * rebuild itself re-reads each colour by tier (see #applyColours), so this array's order carries
-	 * no meaning beyond being stable from one frame to the next.
-	 */
+	// Purely a change detector - the rebuild re-reads each colour by tier (see #applyColours), so
+	// this array's order carries no meaning beyond being stable frame to frame.
 	private int[] readColours()
 	{
 		RarityTier[] tiers = RarityTier.values();
@@ -280,9 +273,8 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * Rebuilds the drawn panel/icon art for every tier from the pristine sources. Recolouring all ten
-	 * images touches ~280k pixels, so this runs only on startup and when a colour actually changes
-	 * (see #render) - never per frame.
+	 * Rebuilds the drawn panel/icon art for every tier from the pristine sources. ~280k pixels across
+	 * ten images, so this runs on startup and colour changes only (see #render) - never per frame.
 	 */
 	private void applyColours(int[] colours)
 	{
@@ -312,13 +304,14 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
-		Double compPercent, Integer killCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
+		Double compPercent, Integer killCount, KillCountKind killCountKind, Double dropProbability,
+		List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
 		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
 		// batch - the only one that plays a sound when bulkUnlockSfx is on.
 		boolean batchStart = queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
-			dropProbability, ambiguousDropRates, batchStart));
+			killCountKind, dropProbability, ambiguousDropRates, batchStart));
 	}
 
 	public void clear()
@@ -355,13 +348,10 @@ public class CollectionLogOverlay extends Overlay
 			applyColours(colours);
 		}
 
-		// TOP_CENTER's own snap-corner centering is relative to the HUD container widget, not the
-		// full client canvas, so it doesn't line up with the native (canvas-centered) collection log
-		// popup we're overlapping. Overriding the preferred location with an absolute canvas position
-		// bypasses that and centers this panel over the game viewport instead, every frame. In
-		// resizable/modern layout the viewport spans the full client width, but in fixed/classic layout
-		// it's a fixed-size area offset left of the sidebar, so it must be centered on the viewport rect
-		// there rather than the full client width (which would skew the panel toward the sidebar).
+		// TOP_CENTER centers on the HUD container widget, not the client canvas, so it doesn't line
+		// up with the native (canvas-centered) popup this overlaps. An absolute location bypasses
+		// that. Must center on the viewport rect, not the client width: in fixed/classic layout the
+		// viewport is offset left of the sidebar, and client width would skew the panel toward it.
 		int viewportCenterX;
 		if (client.isResized())
 		{
@@ -415,12 +405,10 @@ public class CollectionLogOverlay extends Overlay
 		{
 			graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 			graphics.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
-			// The bundled runescape_bold.ttf is hand-hinted to snap to the pixel grid at its native
-			// integer point sizes (e.g. our 16f caption/corner-label sizes coincide with it exactly at
-			// 100% popup scale), which defeats antialiasing regardless of the AA hint above - it only
-			// controls whether the already-hinted/snapped outline gets antialiased, not whether hinting
-			// happens. STROKE_PURE renders the unhinted outline instead, so smoothing is consistent
-			// across every text size rather than only at scales that happen to avoid that coincidence.
+			// runescape_bold.ttf is hand-hinted to snap to the pixel grid at its native integer point
+			// sizes (our 16f sizes hit this at 100% scale), which defeats antialiasing whatever the AA
+			// hint says - that only controls whether the already-snapped outline is antialiased.
+			// STROKE_PURE renders the unhinted outline, so smoothing is consistent at every size.
 			graphics.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
 		}
 
@@ -455,11 +443,14 @@ public class CollectionLogOverlay extends Overlay
 		graphics.setComposite(originalComposite);
 		graphics.setTransform(base);
 
-		// --- icon: independent pop (own scale + fade, pivoted at its own center), only once the
-		// fold has fully played out. Skipped entirely (not just alpha 0) before that, and also
-		// skipped altogether when the item's icon couldn't be resolved - showing the empty icon
-		// frame would be worse than just leaving it off and keeping the panel text-only.
-		if (elapsed >= iconPopStart && current.getItemId() >= 0)
+		// --- icon: independent pop, only once the fold has played out. Skipped entirely (not just
+		// alpha 0) when unresolved - an empty icon frame is worse than a text-only panel.
+		//
+		// A non-negative id isn't proof of an icon: the client returns null for an id it has no
+		// sprite for, so the image itself is what's checked. Fetched before the frame is drawn so
+		// the two are skipped together; unguarded it throws here every frame the popup is up.
+		BufferedImage itemSprite = current.getItemId() >= 0 ? itemManager.getImage(current.getItemId()) : null;
+		if (elapsed >= iconPopStart && itemSprite != null)
 		{
 			float iconRaw = clamp01((elapsed - iconPopStart) / (float) ICON_POP_MILLIS);
 			float iconEase = easeOutBack(iconRaw, ICON_POP_OVERSHOOT);
@@ -477,7 +468,7 @@ public class CollectionLogOverlay extends Overlay
 				graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, iconAlpha)));
 			}
 			graphics.drawImage(iconFrames.get(current.getTier()), iconX, iconY, iconCanvasSize, iconCanvasSize, null);
-			drawItemSprite(graphics);
+			drawItemSprite(graphics, itemSprite);
 			graphics.setComposite(originalComposite);
 			graphics.setTransform(base);
 		}
@@ -486,9 +477,8 @@ public class CollectionLogOverlay extends Overlay
 		return new Dimension(panelWidth, panelHeight + iconCanvasSize / 2);
 	}
 
-	private void drawItemSprite(Graphics2D graphics)
+	private void drawItemSprite(Graphics2D graphics, BufferedImage sprite)
 	{
-		BufferedImage sprite = itemManager.getImage(current.getItemId());
 		float spriteScale = iconTargetSize / (float) Math.max(sprite.getWidth(), sprite.getHeight());
 		int scaledWidth = Math.round(sprite.getWidth() * spriteScale);
 		int scaledHeight = Math.round(sprite.getHeight() * spriteScale);
@@ -555,24 +545,14 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * Draws overall collection log completion - every slot the account has unlocked, across the whole
-	 * log - as a filled track in the band the art's divider line used to occupy.
+	 * Draws overall collection log completion as a filled track in the band the art's divider line
+	 * used to occupy. See "This Plugin: Progress Bar" in AGENTS.md for why this is overall progress
+	 * rather than per-page.
 	 *
-	 * <p>Both counts come straight from the server-pushed varps, so they're populated from login
-	 * onwards with no need for the player to have opened the collection log, and involve no item name
-	 * matching or bundled wiki data. That's what makes this safe to show on every popup, unlike
-	 * per-page progress: the unlock chat message never says which page an item landed in, and many
-	 * items belong to several pages, so a per-page figure couldn't be attributed reliably.
-	 *
-	 * <p>With the bar switched off in config the empty track is still drawn, standing in for the
-	 * divider line the panel art used to carry - visually identical to an account with nothing
-	 * unlocked.
-	 *
-	 * <p>Drawn with {@code fillRect} rather than a stroked or rounded shape on purpose - shape
-	 * antialiasing is never enabled here, and {@code STROKE_PURE} is only set in the two SMOOTH text
-	 * modes (see #render), so anything stroked would rasterize differently between text modes.
-	 * Deliberately does not touch the composite: it inherits the panel's fold transform and fade from
-	 * the caller, and setting its own would clobber the fade-out.
+	 * <p>{@code fillRect} rather than a stroked or rounded shape on purpose: shape antialiasing is
+	 * never enabled here and {@code STROKE_PURE} is set only in the SMOOTH text modes (see #render),
+	 * so anything stroked would rasterize differently between text modes. Does not touch the
+	 * composite - it inherits the panel's fold and fade, and setting its own would clobber the fade.
 	 */
 	private void drawProgressBar(Graphics2D graphics)
 	{
@@ -615,7 +595,11 @@ public class CollectionLogOverlay extends Overlay
 	private void drawCornerStat(Graphics2D graphics, Stat stat, int edgeX, boolean rightAligned, FontMetrics labelMetrics, FontMetrics valueMetrics)
 	{
 		graphics.setFont(labelMetrics.getFont());
-		drawOutlinedString(graphics, stat.getLabel(), rightAligned ? edgeX - labelMetrics.stringWidth(stat.getLabel()) : edgeX, cornerLabelBaselineY, opaque(config.colourStatLabel()));
+		// A no-op today (labels are written to fit - see KillCountKind), here so a longer one added
+		// later ellipsises rather than running under the icon. Not shrunk the way the item name is:
+		// the label sits beside a fixed-size value, and a mismatched pair reads as a bug.
+		String label = truncate(graphics, stat.getLabel(), labelMetrics.getFont(), cornerTextMaxWidth);
+		drawOutlinedString(graphics, label, rightAligned ? edgeX - labelMetrics.stringWidth(label) : edgeX, cornerLabelBaselineY, opaque(config.colourStatLabel()));
 
 		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
 		// a smaller font and tighter line spacing so both still fit above the item name.
@@ -692,10 +676,9 @@ public class CollectionLogOverlay extends Overlay
 	 * Fits the item name on a single line, shrinking the font (down to {@code minFontSize}) until it
 	 * does. Anything still too wide at the minimum size is truncated with an ellipsis.
 	 *
-	 * <p>Deliberately never wraps. Only 28 of the ~1700 collection log item names are wide enough to
-	 * need it, but allowing a second line forces everything below - the progress bar and the corner
-	 * stats - to leave room for a line that almost never appears, which reads as a gap on every other
-	 * popup. Shrinking those few names instead keeps the layout below the name fixed.
+	 * <p>Never wraps. Only 28 of the ~1700 item names are wide enough to need it, and a second line
+	 * would force everything below to reserve room for a line that almost never appears - a visible
+	 * gap on every other popup. Shrinking those few keeps the layout below the name fixed.
 	 */
 	private static FittedName fitName(Graphics2D graphics, String text, Font baseFont, int maxWidth, float minFontSize)
 	{
@@ -790,7 +773,10 @@ public class CollectionLogOverlay extends Overlay
 					return null;
 				}
 				String killCountText = QuantityFormatter.formatNumber(item.getKillCount());
-				return new Stat("KC: ", List.of(killCountText), opaque(config.colourStatValue()));
+				// The label names what was actually counted - kills, harvests, deep delves (see
+				// KillCountKind). Only the dev test command can supply a count with no kind.
+				KillCountKind killCountKind = item.getKillCountKind() != null ? item.getKillCountKind() : KillCountKind.KILLS;
+				return new Stat(killCountKind.getLabel(), List.of(killCountText), opaque(config.colourStatValue()));
 			case DROP_RATE:
 				if (item.getDropProbability() != null)
 				{
@@ -897,6 +883,7 @@ public class CollectionLogOverlay extends Overlay
 		int alchPrice;
 		Double compPercent;
 		Integer killCount;
+		KillCountKind killCountKind;
 		Double dropProbability;
 		List<DropRateResolver.SourceRate> ambiguousDropRates;
 		boolean batchStart;

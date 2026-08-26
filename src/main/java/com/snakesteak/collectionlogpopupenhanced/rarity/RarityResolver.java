@@ -19,25 +19,10 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.game.ItemManager;
 
 /**
- * Resolves a collection log item's rarity tier from two signals:
- * - completion: how many WikiSync-synced players have obtained it (rarer = higher score)
- * - value: GE price (high alch fallback) bucketed against the user's configured gp thresholds
- * How they combine depends on the configured {@link RarityBasis}:
- * - VALUE ranks on nothing at all - the price is compared directly against the user's gp cutoffs,
- *   because "worth at least X" is what players actually mean by value, and unlike a percentile it's
- *   predictable and tunable.
- * - RARITY and COMBINATION still bucket by percentile rank across the whole dataset rather than
- *   fixed cutoffs, so the tier distribution stays consistent as items get added over time.
- *   COMBINATION's value half reuses the same gp thresholds (see {@link #valueScore}) so "value"
- *   can't mean two different things depending on which basis is selected.
- * For items missing a completion score (e.g. recently added, not yet scored by the wiki) with no
- * usable price either (untradeable, no GE listing, no alch value), a third fallback ranks against
- * per-kill drop probability instead - see {@link #resolve} - so a rare-but-unpriced item doesn't
- * silently default to the common tier just because no signal is populated yet.
- * Pets are matched by name ahead of all of this - see {@link #petIdForName}, derived from the same
- * dataset's "All Pets" tab rather than a hand-maintained list, since pets never enter the player's
- * inventory or land on the ground when unlocked (they attach directly as a follower NPC), so
- * {@link ItemIdResolver}'s inventory/ground/GE-search pipeline can never find them any other way.
+ * Resolves a collection log item's rarity tier from completion percentage and value, combined per
+ * the configured {@link RarityBasis}.
+ * <p>See "This Plugin: Rarity Tiers" in AGENTS.md for why value uses absolute gp cutoffs rather than
+ * a percentile, and for the drop-rate and pet fallbacks.
  */
 @Slf4j
 @Singleton
@@ -73,9 +58,8 @@ public class RarityResolver
 	}
 
 	/**
-	 * Replaces the completion dataset with a freshly fetched or cached copy - called by
-	 * {@code RemoteRarityOverridesUpdater} once it has a parsed, non-empty replacement. Safe to call
-	 * from any thread; readers always see either the old or new dataset, never a partial one.
+	 * Replaces the completion dataset. Safe to call from any thread: readers always see either the
+	 * old or the new dataset, never a partial one.
 	 */
 	void reload(Map<String, CompletionEntry> raw)
 	{
@@ -89,6 +73,16 @@ public class RarityResolver
 	Integer petIdForName(String name)
 	{
 		return completionData.petIdByName.get(name);
+	}
+
+	/**
+	 * @return the item id the wiki dataset records for {@code name}, or {@code null} if it isn't a
+	 *         known collection log item. {@link ItemIdResolver}'s last-resort check - where several
+	 *         ids share a name the lowest wins, which is why it runs last. See AGENTS.md.
+	 */
+	public Integer datasetIdForName(String name)
+	{
+		return completionData.idByItemName.get(name);
 	}
 
 	/**
@@ -120,15 +114,11 @@ public class RarityResolver
 	}
 
 	/**
-	 * @param tier which tier to pick from; must not be {@link PreviewTier#NONE} (callers gate on that
-	 *             before ever reaching here)
-	 * @return a random item id matching {@code tier}, or {@code null} if none is available (dataset
-	 *         not loaded yet, or genuinely no item of that tier). {@link PreviewTier#PET} draws from
-	 *         the pet name index directly since pets never enter {@link CompletionData#ids} (see the
-	 *         class javadoc); {@link PreviewTier#RANDOM} reuses {@link #randomItemIds}'s pool with no
-	 *         tier filtering. The remaining tiers scan a shuffled candidate list, calling
-	 *         {@link #resolve} on each until one buckets into the requested tier - same per-item cost
-	 *         as a real unlock, just repeated until a match turns up.
+	 * @param tier which tier to pick from; must not be {@link PreviewTier#NONE} (callers gate first)
+	 * @return a random item id matching {@code tier}, or {@code null} if none is available.
+	 *         {@link PreviewTier#PET} draws from the pet name index, since pets never enter
+	 *         {@link CompletionData#ids}. Other tiers scan a shuffled list, resolving each until one
+	 *         buckets into {@code tier}.
 	 */
 	public Integer randomItemIdForTier(PreviewTier tier)
 	{
@@ -202,11 +192,8 @@ public class RarityResolver
 
 		if (basis == RarityBasis.VALUE)
 		{
-			// Absolute gp cutoffs, not a percentile: "worth at least X" is what players actually mean
-			// by value, and unlike a percentile it's predictable and tunable. A price of 0 simply sits
-			// below the lowest cutoff and lands in COMMON, so there's no drop-rate fallback here - that
-			// only existed because a percentile of a zero price is meaningless.
-			// Returns before buildDataset() - absolute cutoffs need no distribution to rank against.
+			// Returns before buildDataset(): absolute cutoffs need no distribution to rank against.
+			// A price of 0 lands in COMMON, so no drop-rate fallback is needed here. See AGENTS.md.
 			return new RarityResult(bucketByThreshold(price), itemId, price, highAlch, compPercent,
 				completionScore, valueScore, 0, 0, 0, 0, alchPrice);
 		}
@@ -234,19 +221,15 @@ public class RarityResolver
 		}
 		else if (price > 0)
 		{
-			// Priced but unscored by the wiki: bucket on the same absolute cutoffs the VALUE basis
-			// uses, so an identical price can't tier one way here and another way there.
+			// Same absolute cutoffs the VALUE basis uses, so an identical price can't tier one way
+			// here and another way there.
 			RarityTier tier = bucketByThreshold(price);
 			return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, 0,
 				dataset.compositeScores.length, 0, 0, alchPrice);
 		}
 		else
 		{
-			// No completion data for this item, and no usable price either (untradeable, unlisted, or
-			// the GE price cache hasn't finished loading yet) - fall back to per-kill drop probability,
-			// the last signal available for a genuinely new/unpriced item. Only if that's ALSO
-			// unavailable (not in drop-rates.json, or ambiguous across multiple sources) is there
-			// nothing left to legitimately rank against.
+			// Neither signal available - fall back to per-kill drop probability. See AGENTS.md.
 			Double dropRateScore = dropRarityScore(itemName);
 			if (dropRateScore != null && dataset.dropRateScores.length > 0)
 			{
@@ -304,10 +287,9 @@ public class RarityResolver
 
 	/**
 	 * @return a 0-1 rarity score (rarer = closer to 1) from {@code itemName}'s per-kill drop
-	 *         probability, or {@code null} if it isn't in the drop-rate dataset, or is a notable drop
-	 *         from more than one source at different rates (see
-	 *         {@link DropRateResolver#dropProbabilityByItemName}). Unlike price, drop probabilities
-	 *         are already bounded 0-1 so no log-scaling is needed before ranking them.
+	 *         probability, or {@code null} if unavailable or ambiguous across sources (see
+	 *         {@link DropRateResolver#dropProbabilityByItemName}). Drop probabilities are already
+	 *         bounded 0-1, so unlike price they need no log-scaling before ranking.
 	 */
 	private Double dropRarityScore(String itemName)
 	{
@@ -316,13 +298,8 @@ public class RarityResolver
 	}
 
 	/**
-	 * The value half of the COMBINATION blend, on the same 0-1 scale as completionScore. Derived from
-	 * the user's gp thresholds rather than a percentile of price across the dataset, so "value" means
-	 * one thing everywhere in the plugin - otherwise the thresholds would be silently ignored on
-	 * COMBINATION, which is the default basis.
-	 * The four steps are deliberately coarse: three cutoffs can only distinguish four bands, and
-	 * interpolating between them would invent precision the user never expressed. Completion percent
-	 * still supplies the fine-grained signal, which is what the 0.6 weighting is for.
+	 * The value half of the COMBINATION blend, on the same 0-1 scale as completionScore. The four
+	 * steps are coarse on purpose - see AGENTS.md.
 	 */
 	private double valueScore(int itemId)
 	{
@@ -344,10 +321,7 @@ public class RarityResolver
 		}
 	}
 
-	/**
-	 * Buckets an absolute gp price into a tier using the user's configured cutoffs.
-	 * Reads config on every call so an edited threshold takes effect on the next unlock.
-	 */
+	// Reads config on every call, so an edited threshold takes effect on the next unlock.
 	private RarityTier bucketByThreshold(int price)
 	{
 		int[] thresholds = thresholds();
@@ -368,8 +342,8 @@ public class RarityResolver
 
 	/**
 	 * The three configured cutoffs as {uncommon, rare, veryRare}, clamped non-negative and sorted
-	 * ascending. Sorting means a user who types Rare=5m and Very rare=1m still gets monotonic tiers
-	 * instead of a band that can never be reached.
+	 * ascending - a user who types Rare=5m and Very rare=1m still gets monotonic tiers instead of a
+	 * band that can never be reached.
 	 */
 	private int[] thresholds()
 	{
@@ -419,14 +393,13 @@ public class RarityResolver
 	}
 
 	/**
-	 * Rebuilt on every call rather than cached: it's ~1700 in-memory map lookups, collection log
-	 * unlocks are rare, and recomputing avoids serving stale percentile cutoffs from a price
-	 * snapshot taken before ItemManager finished its own background price refresh.
+	 * Rebuilt on every call rather than cached: ~1700 in-memory lookups, unlocks are rare, and
+	 * recomputing avoids stale cutoffs from a price snapshot taken before ItemManager finished its
+	 * own background refresh.
 	 */
 	private Dataset buildDataset(CompletionData data)
 	{
-		// Only entries with a real completion score - items pending a wiki score (comp == null) have
-		// nothing to rank a completion-based percentile against.
+		// Items pending a wiki score (comp == null) have nothing to rank a percentile against.
 		List<Map.Entry<Integer, CompletionEntry>> scored = data.byId.entrySet().stream()
 			.filter(entry -> entry.getValue().comp != null)
 			.collect(Collectors.toList());
@@ -438,9 +411,8 @@ public class RarityResolver
 		int i = 0;
 		for (Map.Entry<Integer, CompletionEntry> entry : scored)
 		{
-			// Must use the same threshold-derived value score the live item is scored with in
-			// resolve() - ranking an item against a distribution built a different way would skew
-			// every tier.
+			// Must be the same threshold-derived score resolve() uses on the live item - ranking
+			// against a differently-built distribution would skew every tier.
 			double valueScore = valueScoreForPrice(getPrice(entry.getKey()));
 			double completionScore = 1 - (entry.getValue().comp / 100.0);
 			compositeScores[i] = COMPLETION_WEIGHT * completionScore + VALUE_WEIGHT * valueScore;
@@ -451,10 +423,8 @@ public class RarityResolver
 		Arrays.sort(compositeScores);
 		Arrays.sort(completionScores);
 
-		// Comp-less items (comp == null) are exactly the ones the drop-rate fallback exists for, so
-		// the ranking distribution is built from that same population's drop rates rather than from
-		// "scored" - an item with a completion score never needs this fallback and would just dilute
-		// the distribution's rarity range.
+		// Built from the comp-less population, the same one the drop-rate fallback exists for -
+		// scored items never need it and would dilute the distribution's rarity range.
 		double[] dropRateScores = data.byId.values().stream()
 			.filter(entry -> entry.comp == null && entry.name != null)
 			.map(entry -> dropRarityScore(entry.name))
@@ -467,10 +437,8 @@ public class RarityResolver
 	}
 
 	/**
-	 * One item's entry in collection-log.json. name/tabs come from the wiki's canonical item list,
-	 * comp from its completion-percentage dataset (see the osrs-collection-log-data repo's
-	 * generate-collection-log.py). comp is null for items the wiki hasn't gathered a completion score
-	 * for yet (e.g. very recently added).
+	 * One item's entry in collection-log.json. comp is null for items the wiki hasn't scored yet
+	 * (see the osrs-collection-log-data repo's generate-collection-log.py).
 	 */
 	static final class CompletionEntry
 	{
@@ -479,17 +447,15 @@ public class RarityResolver
 		Double comp;
 	}
 
-	/**
-	 * Bundles the parsed per-item entries with the item id list and pet name index derived from
-	 * them, so {@link #reload(Map)} can swap all three atomically via a single volatile write -
-	 * readers never see one already updated while the others are still the old dataset.
-	 */
+	// Bundled so reload() can swap all three atomically in one volatile write - readers never see
+	// one updated while the others are still the old dataset.
 	private static final class CompletionData
 	{
 		private final Map<Integer, CompletionEntry> byId;
 		private final List<Integer> ids;
 		private final Map<String, Integer> petIdByName;
 		private final Map<String, List<String>> tabsByItemName;
+		private final Map<String, Integer> idByItemName;
 
 		private CompletionData(Map<String, CompletionEntry> raw)
 		{
@@ -499,9 +465,7 @@ public class RarityResolver
 				raw.forEach((id, entry) -> parsed.put(Integer.parseInt(id), entry));
 			}
 			this.byId = Collections.unmodifiableMap(parsed);
-			// Only ids with a real completion score - randomItemIds() (the "::clogtest" dev command)
-			// should only ever test items that actually have one, same as before this class also
-			// started carrying comp-less entries (for their name/tabs data).
+			// Only scored ids: the "::clogtest" dev command should only test items that have one.
 			this.ids = parsed.entrySet().stream()
 				.filter(entry -> entry.getValue().comp != null)
 				.map(Map.Entry::getKey)
@@ -509,12 +473,16 @@ public class RarityResolver
 
 			Map<String, Integer> pets = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 			Map<String, List<String>> tabs = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+			Map<String, Integer> idsByName = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+			// parsed is a TreeMap keyed by id, so putIfAbsent keeps the lowest id for names shared by
+			// several variants (see datasetIdForName).
 			parsed.forEach((id, entry) ->
 			{
 				if (entry.name == null)
 				{
 					return;
 				}
+				idsByName.putIfAbsent(entry.name, id);
 				if (entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(PET_TAB)))
 				{
 					pets.put(entry.name, id);
@@ -526,6 +494,7 @@ public class RarityResolver
 			});
 			this.petIdByName = Collections.unmodifiableMap(pets);
 			this.tabsByItemName = Collections.unmodifiableMap(tabs);
+			this.idByItemName = Collections.unmodifiableMap(idsByName);
 		}
 	}
 

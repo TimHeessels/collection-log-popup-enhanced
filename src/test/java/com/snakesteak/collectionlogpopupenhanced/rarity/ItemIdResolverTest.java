@@ -192,6 +192,49 @@ public class ItemIdResolverTest
 	}
 
 	@Test
+	public void fallsBackToDatasetForUntradeableNotInInventoryOrOnGround()
+	{
+		// Guild hunter top is untradeable, so itemManager.search finds nothing (the @Before stubs an
+		// empty GE result for every name) - the dataset index is the only check left that can resolve
+		// it, and without it the popup renders a blank icon for id -1.
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Guild hunter top", callback);
+		assertFalse("should defer rather than resolve immediately", callback.called);
+
+		resolver.onGameTick(new GameTick());
+		assertEquals(29265, callback.value);
+		assertEquals(ItemIdResolver.Source.DATASET, callback.source);
+	}
+
+	@Test
+	public void prefersGeSearchOverDatasetWhenItemIsTradeable()
+	{
+		// The dataset only knows a canonical id, so a live-game check must always win where one is
+		// available - here the GE search, which resolves the exact tradeable item.
+		when(itemManager.search("Twisted bow")).thenReturn(List.of(itemPrice(20997, "Twisted bow")));
+
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Twisted bow", callback);
+		resolver.onGameTick(new GameTick());
+
+		assertEquals(20997, callback.value);
+		assertEquals(ItemIdResolver.Source.GE_SEARCH, callback.source);
+	}
+
+	@Test
+	public void datasetFallbackPicksLowestIdForNamesSharedByVariants()
+	{
+		// Chompy bird hat covers 18 ids, all cosmetic variants of one item; the name alone can't say
+		// which, so the lowest is used as a representative sprite.
+		CapturingCallback callback = new CapturingCallback();
+		resolver.resolveIdByName("Chompy bird hat", callback);
+		resolver.onGameTick(new GameTick());
+
+		assertEquals(2978, callback.value);
+		assertEquals(ItemIdResolver.Source.DATASET, callback.source);
+	}
+
+	@Test
 	public void returnsMinusOneWhenNothingMatchesByEndOfTick()
 	{
 		CapturingCallback callback = new CapturingCallback();
@@ -203,11 +246,9 @@ public class ItemIdResolverTest
 	}
 
 	/**
-	 * Reproduces the real-world bug: the "New item added to your collection log" chat message is
-	 * delivered BEFORE the ItemContainerChanged event that actually adds the item to the inventory.
-	 * A purely synchronous inventory/ground/GE check (the old behavior) can never find an untradeable
-	 * item in this case and always falls back to -1. The resolver must wait for the inventory update
-	 * and diff it against the pre-message snapshot to find the newly-appeared id.
+	 * Reproduces the real-world bug: the unlock chat message arrives BEFORE the
+	 * ItemContainerChanged that adds the item, so a synchronous check always falls back to -1. The
+	 * resolver must wait for the inventory update and diff against the pre-message snapshot.
 	 */
 	@Test
 	public void resolvesUntradeableItemFromDeferredInventoryDiff()
@@ -228,10 +269,13 @@ public class ItemIdResolverTest
 	@Test
 	public void ignoresItemContainerChangedForOtherContainers()
 	{
-		nameItem(itemManager, 300, "Partial note");
+		// Deliberately a name absent from the dataset: the point of the test is the assertFalse below,
+		// and a real collection log name would now resolve via the dataset fallback on the tick,
+		// masking whether the bank update itself was correctly ignored.
+		nameItem(itemManager, 300, "Not a real item");
 
 		CapturingCallback callback = new CapturingCallback();
-		resolver.resolveIdByName("Partial note", callback);
+		resolver.resolveIdByName("Not a real item", callback);
 
 		ItemContainer bank = inventoryOf(new Item(300, 1));
 		resolver.onItemContainerChanged(new ItemContainerChanged(InventoryID.BANK, bank));

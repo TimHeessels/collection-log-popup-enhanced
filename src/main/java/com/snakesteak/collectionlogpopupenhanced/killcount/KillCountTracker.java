@@ -43,9 +43,16 @@ public class KillCountTracker
 	private static final Pattern SEPULCHRE_COFFIN_PATTERN =
 		Pattern.compile("opened the Grand Hallowed Coffin ?(?<kc>[0-9,]+)", Pattern.CASE_INSENSITIVE);
 	// The trailing "rumours for the Hunter Guild" is what keeps this off other "You have completed
-	// N ..." messages, such as the clue scroll tally.
+	// N ..." messages, such as the clue scroll tally below.
 	private static final Pattern HUNTER_RUMOUR_PATTERN = Pattern.compile(
 		"completed (?<kc>[0-9,]+) rumours? for the Hunter Guild",
+		Pattern.CASE_INSENSITIVE);
+
+	// Clue scroll caskets: "You have completed 295 hard Treasure Trails." The difficulty word plus
+	// "Treasure Trails" is, verbatim, the collection log tab name - unlike the FIXED_SOURCES above,
+	// the source isn't hardcoded here because it varies per message.
+	private static final Pattern CLUE_SCROLL_PATTERN = Pattern.compile(
+		"You have completed (?<kc>[0-9,]+) (?<boss>[a-zA-Z]+ Treasure Trails)",
 		Pattern.CASE_INSENSITIVE);
 
 	private static final String ARTICLE_PREFIX = "the ";
@@ -81,7 +88,8 @@ public class KillCountTracker
 		Map.entry("Barrows chest", "Barrows Chests"),
 		Map.entry("Lunar Chest", "Moons of Peril"),
 		Map.entry("TzTok-Jad", "The Fight Caves"),
-		Map.entry("TzKal-Zuk", "The Inferno")
+		Map.entry("TzKal-Zuk", "The Inferno"),
+		Map.entry("Mimic", "Scroll Cases")
 	);
 
 	// Whole-word match, so a boss merely containing "chest" doesn't qualify as a chest opening.
@@ -138,6 +146,15 @@ public class KillCountTracker
 			lastBoss = boss;
 			lastKillCount = parseCount(matcher.group("kc"));
 			lastKind = kindOf(matcher.group("pre"), matcher.group("post"), boss);
+			return;
+		}
+
+		Matcher clueMatcher = CLUE_SCROLL_PATTERN.matcher(message);
+		if (clueMatcher.find())
+		{
+			lastBoss = clueMatcher.group("boss");
+			lastKillCount = parseCount(clueMatcher.group("kc"));
+			lastKind = KillCountKind.COMPLETIONS;
 			return;
 		}
 

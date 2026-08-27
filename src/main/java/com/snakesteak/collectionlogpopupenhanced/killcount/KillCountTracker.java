@@ -48,12 +48,19 @@ public class KillCountTracker
 		"completed (?<kc>[0-9,]+) rumours? for the Hunter Guild",
 		Pattern.CASE_INSENSITIVE);
 
-	// Clue scroll caskets: "You have completed 295 hard Treasure Trails." The difficulty word plus
-	// "Treasure Trails" is, verbatim, the collection log tab name - unlike the FIXED_SOURCES above,
-	// the source isn't hardcoded here because it varies per message.
+	// Clue scroll caskets: "You have completed 295 hard Treasure Trails." - except the very first
+	// casket of a tier ever, which reads "You have completed 1 hard Treasure Trail." (singular, no
+	// "s"). Only the difficulty word is captured; the tab name (always plural) is reconstructed from
+	// it below rather than taken verbatim, so the singular form still resolves to the right tab.
 	private static final Pattern CLUE_SCROLL_PATTERN = Pattern.compile(
-		"You have completed (?<kc>[0-9,]+) (?<boss>[a-zA-Z]+ Treasure Trails)",
+		"You have completed (?<kc>[0-9,]+) (?<difficulty>[a-zA-Z]+) Treasure Trails?",
 		Pattern.CASE_INSENSITIVE);
+
+	// "Shared Treasure Trail Rewards" and "Scroll Cases" both pool items across every clue
+	// difficulty in the dataset (no per-tier split), so any completed casket counts for them,
+	// regardless of which tier it was.
+	private static final String SHARED_TREASURE_TRAIL_REWARDS = "shared treasure trail rewards";
+	private static final String SCROLL_CASES = "scroll cases";
 
 	private static final String ARTICLE_PREFIX = "the ";
 
@@ -88,8 +95,7 @@ public class KillCountTracker
 		Map.entry("Barrows chest", "Barrows Chests"),
 		Map.entry("Lunar Chest", "Moons of Peril"),
 		Map.entry("TzTok-Jad", "The Fight Caves"),
-		Map.entry("TzKal-Zuk", "The Inferno"),
-		Map.entry("Mimic", "Scroll Cases")
+		Map.entry("TzKal-Zuk", "The Inferno")
 	);
 
 	// Whole-word match, so a boss merely containing "chest" doesn't qualify as a chest opening.
@@ -152,7 +158,7 @@ public class KillCountTracker
 		Matcher clueMatcher = CLUE_SCROLL_PATTERN.matcher(message);
 		if (clueMatcher.find())
 		{
-			lastBoss = clueMatcher.group("boss");
+			lastBoss = clueMatcher.group("difficulty") + " Treasure Trails";
 			lastKillCount = parseCount(clueMatcher.group("kc"));
 			lastKind = KillCountKind.COMPLETIONS;
 			return;
@@ -233,12 +239,25 @@ public class KillCountTracker
 		String normalizedAlias = normalize(BOSS_ALIASES.getOrDefault(lastBoss, lastBoss));
 		boolean matches = candidateSources.stream()
 			.map(KillCountTracker::normalize)
-			.anyMatch(source -> matchesSource(normalizedBoss, source) || matchesSource(normalizedAlias, source));
+			.anyMatch(source -> matchesSource(normalizedBoss, source)
+				|| matchesSource(normalizedAlias, source)
+				|| isClueWildcardMatch(source));
 		if (!matches)
 		{
 			return null;
 		}
 		return new RecentKill(lastBoss, lastKillCount, lastKind);
+	}
+
+	// "Shared Treasure Trail Rewards" and "Scroll Cases" aren't split by clue difficulty in the
+	// dataset, so a completed casket of any tier counts for them - checked separately from
+	// matchesSource/BOSS_ALIASES, which are both about a single fixed tab per source.
+	private boolean isClueWildcardMatch(String normalizedSource)
+	{
+		return lastKind == KillCountKind.COMPLETIONS
+			&& lastBoss.endsWith("Treasure Trails")
+			&& (normalizedSource.equals(SHARED_TREASURE_TRAIL_REWARDS)
+				|| normalizedSource.equals(SCROLL_CASES));
 	}
 
 	// Substring-with-word-boundaries rather than equality: the collection log doesn't track raid

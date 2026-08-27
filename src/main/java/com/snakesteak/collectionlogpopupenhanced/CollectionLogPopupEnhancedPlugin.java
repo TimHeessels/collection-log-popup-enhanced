@@ -11,7 +11,6 @@ import com.snakesteak.collectionlogpopupenhanced.rarity.LocalRarityDatasetLoader
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,8 +43,8 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private static final Pattern NEW_COLLECTION_LOG_ITEM = Pattern.compile("New item added to your collection log: (.*)");
 
 	// Dev-only: "::clogtest [count]" shows random items from the rarity dataset; "::clogtest <item
-	// name> [kc]" runs a specific name through the real detection pipeline, optionally forcing a kill
-	// count. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
+	// name>" runs a specific name through the real detection pipeline, kill count correlation
+	// included. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
 
 	// Matched against VarClientID.NOTIFICATION_TITLE to tell our notification apart from the combat
@@ -215,7 +214,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (matcher.matches())
 		{
 			String itemName = Text.removeTags(matcher.group(1));
-			handleNewCollectionLogItem(null, itemName, null);
+			handleNewCollectionLogItem(null, itemName);
 		}
 	}
 
@@ -253,28 +252,11 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			}
 		}
 
-		// A non-negative last token is a forced kill count; everything before it is the item name.
-		Integer forcedKillCount = null;
-		int nameArgCount = args.length;
-		if (args.length >= 2)
-		{
-			try
-			{
-				int kc = Integer.parseInt(args[args.length - 1]);
-				if (kc >= 0)
-				{
-					forcedKillCount = kc;
-					nameArgCount = args.length - 1;
-				}
-			}
-			catch (NumberFormatException e)
-			{
-				// Last token isn't a kill count - the whole thing is the item name.
-			}
-		}
-
-		String itemName = String.join(" ", Arrays.copyOfRange(args, 0, nameArgCount));
-		handleNewCollectionLogItem(null, itemName, forcedKillCount);
+		// Every token is part of the item name, trailing digits included - the log is full of names
+		// like "Saradomin page 1", and a trailing number was once read as a kill count override,
+		// which silently truncated them to an item that doesn't exist.
+		String itemName = String.join(" ", args);
+		handleNewCollectionLogItem(null, itemName);
 	}
 
 	private void testRandomDatasetItems(int count)
@@ -294,7 +276,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			int canonicalId = itemManager.canonicalize(itemId);
 			String itemName = itemManager.getItemComposition(canonicalId).getName();
-			handleNewCollectionLogItem(canonicalId, itemName, null);
+			handleNewCollectionLogItem(canonicalId, itemName);
 		}
 	}
 
@@ -309,47 +291,33 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 		int canonicalId = itemManager.canonicalize(itemId);
 		String itemName = itemManager.getItemComposition(canonicalId).getName();
-		handleNewCollectionLogItem(canonicalId, itemName, null);
+		handleNewCollectionLogItem(canonicalId, itemName);
 	}
 
-	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, Integer forcedKillCount)
+	private void handleNewCollectionLogItem(Integer knownItemId, String itemName)
 	{
 		if (knownItemId != null)
 		{
-			handleResolvedItem(knownItemId, itemName, "known", forcedKillCount);
+			handleResolvedItem(knownItemId, itemName, "known");
 			return;
 		}
 
 		// Resolution is asynchronous - see ItemIdResolver.resolveIdByName javadoc.
-		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), forcedKillCount));
+		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString()));
 	}
 
-	private void handleResolvedItem(int itemId, String itemName, String resolvedVia, Integer forcedKillCount)
+	private void handleResolvedItem(int itemId, String itemName, String resolvedVia)
 	{
 		RarityResult result = rarityResolver.resolve(itemId, itemName);
 
-		Integer killCount;
-		KillCountKind killCountKind;
-		String source;
-		if (forcedKillCount != null)
-		{
-			// Dev-only test override (see TEST_COMMAND) - bypasses the real correlated kill, so
-			// there's no known source either, and the count is labelled as a plain kill count.
-			killCount = forcedKillCount;
-			killCountKind = KillCountKind.KILLS;
-			source = null;
-		}
-		else
-		{
-			// Read now, right before display, rather than when the chat message first arrived -
-			// resolution can be deferred by a tick or more (see ItemIdResolver).
-			List<String> candidateSources = rarityResolver.tabsForItemName(itemName);
-			KillCountTracker.RecentKill kill = killCountTracker.killCountFor(candidateSources);
+		// Read now, right before display, rather than when the chat message first arrived -
+		// resolution can be deferred by a tick or more (see ItemIdResolver).
+		List<String> candidateSources = rarityResolver.tabsForItemName(itemName);
+		KillCountTracker.RecentKill kill = killCountTracker.killCountFor(candidateSources);
 
-			killCount = kill != null ? kill.getKillCount() : null;
-			killCountKind = kill != null ? kill.getKind() : null;
-			source = kill != null ? kill.getSource() : null;
-		}
+		Integer killCount = kill != null ? kill.getKillCount() : null;
+		KillCountKind killCountKind = kill != null ? kill.getKind() : null;
+		String source = kill != null ? kill.getSource() : null;
 
 		// The drop rate dataset's source names don't always agree with the kill count's source name
 		// (e.g. Barrows' kill count source is "Barrows chest", but its drop rate source is "Chest
@@ -370,7 +338,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			itemName, itemId, resolvedVia, result, killCount, killCountKind, dropProbability, ambiguousDropRates);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, dropProbability, ambiguousDropRates);
+			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, source, dropProbability, ambiguousDropRates);
 	}
 
 	@Provides

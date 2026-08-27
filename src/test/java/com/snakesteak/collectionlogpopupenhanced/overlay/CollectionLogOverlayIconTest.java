@@ -96,7 +96,7 @@ public class CollectionLogOverlayIconTest
 		when(itemManager.getImage(anyInt())).thenReturn(null);
 
 		overlay.enqueue("Guild hunter top", ITEM_ID, RarityTier.COMMON, 480, true, 480, 15.4,
-			null, null, null, List.of());
+			null, null, null, null, List.of());
 
 		renderPastFold();
 	}
@@ -112,7 +112,7 @@ public class CollectionLogOverlayIconTest
 		when(itemManager.getImage(anyInt())).thenReturn(sprite);
 
 		overlay.enqueue("Guild hunter top", ITEM_ID, RarityTier.COMMON, 480, true, 480, 15.4,
-			312, KillCountKind.RUMOURS, null, List.of());
+			312, KillCountKind.RUMOURS, "Hunter Guild", null, List.of());
 
 		renderPastFold();
 	}
@@ -122,7 +122,7 @@ public class CollectionLogOverlayIconTest
 	{
 		// The pre-existing sentinel case: a negative id short-circuits before the sprite lookup.
 		overlay.enqueue("Some unknown item", -1, RarityTier.COMMON, 0, false, 0, null,
-			null, null, null, List.of());
+			null, null, null, null, List.of());
 
 		renderPastFold();
 	}

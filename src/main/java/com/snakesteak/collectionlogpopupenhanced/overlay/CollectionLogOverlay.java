@@ -304,14 +304,14 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
-		Double compPercent, Integer killCount, KillCountKind killCountKind, Double dropProbability,
-		List<DropRateResolver.SourceRate> ambiguousDropRates)
+		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
+		Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
 		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
 		// batch - the only one that plays a sound when bulkUnlockSfx is on.
 		boolean batchStart = queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
-			killCountKind, dropProbability, ambiguousDropRates, batchStart));
+			killCountKind, killCountSource, dropProbability, ambiguousDropRates, batchStart));
 	}
 
 	public void clear()
@@ -595,8 +595,9 @@ public class CollectionLogOverlay extends Overlay
 	private void drawCornerStat(Graphics2D graphics, Stat stat, int edgeX, boolean rightAligned, FontMetrics labelMetrics, FontMetrics valueMetrics)
 	{
 		graphics.setFont(labelMetrics.getFont());
-		// A no-op today (labels are written to fit - see KillCountKind), here so a longer one added
-		// later ellipsises rather than running under the icon. Not shrunk the way the item name is:
+		// A no-op today - every label, including the derived ones, comes from a table written to fit
+		// (see KillCountKind). Here so a longer one added later ellipsises rather than running under
+		// the icon. Not shrunk the way the item name is:
 		// the label sits beside a fixed-size value, and a mismatched pair reads as a bug.
 		String label = truncate(graphics, stat.getLabel(), labelMetrics.getFont(), cornerTextMaxWidth);
 		drawOutlinedString(graphics, label, rightAligned ? edgeX - labelMetrics.stringWidth(label) : edgeX, cornerLabelBaselineY, opaque(config.colourStatLabel()));
@@ -773,10 +774,12 @@ public class CollectionLogOverlay extends Overlay
 					return null;
 				}
 				String killCountText = QuantityFormatter.formatNumber(item.getKillCount());
-				// The label names what was actually counted - kills, harvests, deep delves (see
-				// KillCountKind). Only the dev test command can supply a count with no kind.
+				// The label names what was actually counted - kills, harvests, deep delves - or the
+				// source itself where that would still be ambiguous, as for a clue tier or a raid
+				// mode (see KillCountKind). Count and kind always arrive together, so the fallback is
+				// only a guard against a future caller supplying one without the other.
 				KillCountKind killCountKind = item.getKillCountKind() != null ? item.getKillCountKind() : KillCountKind.KILLS;
-				return new Stat(killCountKind.getLabel(), List.of(killCountText), opaque(config.colourStatValue()));
+				return new Stat(killCountKind.labelFor(item.getKillCountSource()), List.of(killCountText), opaque(config.colourStatValue()));
 			case DROP_RATE:
 				if (item.getDropProbability() != null)
 				{
@@ -884,6 +887,7 @@ public class CollectionLogOverlay extends Overlay
 		Double compPercent;
 		Integer killCount;
 		KillCountKind killCountKind;
+		String killCountSource;
 		Double dropProbability;
 		List<DropRateResolver.SourceRate> ambiguousDropRates;
 		boolean batchStart;

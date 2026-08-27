@@ -287,6 +287,18 @@ public class KillCountTrackerTest
 	}
 
 	@Test
+	public void mimicKillCountDoesNotMatchScrollCases()
+	{
+		// Deliberately no alias here, despite "Your Mimic kill count is:" being a real message: the
+		// Mimic is fought mid-trail, but its unique drops (including scroll cases) come from opening
+		// the casket afterwards, same as every other clue reward - the casket completion count is the
+		// meaningful one, not however many Mimics happened to spawn along the way.
+		fireMessage("Your Mimic kill count is: 37.");
+
+		assertNull(tracker.killCountFor(List.of("Scroll Cases")));
+	}
+
+	@Test
 	public void matchesGauntletCompletionCount()
 	{
 		fireMessage("Your Gauntlet completion count is: <col=ff0000>10</col>.");
@@ -657,5 +669,112 @@ public class KillCountTrackerTest
 
 		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Zulrah"));
 		assertEquals("Zulrah", kill.getSource());
+	}
+
+	@Test
+	public void parsesClueScrollCasketCompletionCount()
+	{
+		// "You have completed N <difficulty> Treasure Trails." names no boss at all - the difficulty
+		// word plus "Treasure Trails" is, verbatim, the collection log tab name.
+		fireMessage("You have completed 295 hard Treasure Trails.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Hard Treasure Trails"));
+		assertEquals("hard Treasure Trails", kill.getSource());
+		assertEquals(295, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
+	public void parsesEachClueScrollDifficultyAgainstItsOwnTab()
+	{
+		fireMessage("You have completed 1 beginner Treasure Trails.");
+		assertEquals(1, tracker.killCountFor(List.of("Beginner Treasure Trails")).getKillCount());
+
+		fireMessage("You have completed 2 easy Treasure Trails.");
+		assertEquals(2, tracker.killCountFor(List.of("Easy Treasure Trails")).getKillCount());
+
+		fireMessage("You have completed 3 medium Treasure Trails.");
+		assertEquals(3, tracker.killCountFor(List.of("Medium Treasure Trails")).getKillCount());
+
+		fireMessage("You have completed 4 hard Treasure Trails.");
+		assertEquals(4, tracker.killCountFor(List.of("Hard Treasure Trails")).getKillCount());
+
+		fireMessage("You have completed 5 elite Treasure Trails.");
+		assertEquals(5, tracker.killCountFor(List.of("Elite Treasure Trails")).getKillCount());
+
+		fireMessage("You have completed 6 master Treasure Trails.");
+		assertEquals(6, tracker.killCountFor(List.of("Master Treasure Trails")).getKillCount());
+	}
+
+	@Test
+	public void latestOfTwoClueCompletionsInARowWins()
+	{
+		// Redeeming caskets back-to-back (e.g. a hard casket followed immediately by an elite one)
+		// fires one completion message per casket - the item unlocks from whichever fired last.
+		fireMessage("You have completed 295 hard Treasure Trails.");
+		fireMessage("You have completed 126 elite Treasure Trails.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Elite Treasure Trails"));
+		assertEquals(126, kill.getKillCount());
+
+		assertNull(tracker.killCountFor(List.of("Hard Treasure Trails")));
+	}
+
+	@Test
+	public void doesNotConfuseClueScrollTallyWithHunterRumours()
+	{
+		// Both start with "You have completed N ..." - the Hunter Guild pattern's trailing text is
+		// what tells them apart, but the clue pattern must not accidentally swallow the rumour message.
+		fireMessage("You have completed 312 rumours for the Hunter Guild.");
+
+		assertNull(tracker.killCountFor(List.of("Master Treasure Trails")));
+	}
+
+	@Test
+	public void parsesFirstEverCasketOfATierAsSingular()
+	{
+		// The very first casket of a tier reads "...1 master Treasure Trail." (no "s") - every later
+		// one is plural. The stored source must still be the plural tab name either way.
+		fireMessage("You have completed 1 master Treasure Trail.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Master Treasure Trails"));
+		assertEquals("master Treasure Trails", kill.getSource());
+		assertEquals(1, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
+	public void matchesSharedTreasureTrailRewardsForAnyDifficulty()
+	{
+		// The dataset pools "Shared Treasure Trail Rewards" across every clue tier rather than
+		// splitting it per difficulty - any completed casket should count for it.
+		fireMessage("You have completed 42 easy Treasure Trails.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Shared Treasure Trail Rewards"));
+		assertEquals(42, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
+	public void matchesScrollCasesForAnyDifficulty()
+	{
+		// Same reasoning as Shared Treasure Trail Rewards - minor/major scroll cases for every tier
+		// (plus the Mimic's) all share the one "Scroll Cases" tab.
+		fireMessage("You have completed 8 elite Treasure Trails.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Scroll Cases"));
+		assertEquals(8, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
+	public void doesNotWildcardMatchUnrelatedCompletions()
+	{
+		// The wildcard is scoped to sources ending in "Treasure Trails" - a raid's "completed X"
+		// message must not accidentally satisfy Shared Treasure Trail Rewards or Scroll Cases.
+		fireMessage("Your completed Chambers of Xeric count is: 5.");
+
+		assertNull(tracker.killCountFor(List.of("Shared Treasure Trail Rewards")));
+		assertNull(tracker.killCountFor(List.of("Scroll Cases")));
 	}
 }

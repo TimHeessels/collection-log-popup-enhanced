@@ -62,6 +62,10 @@ public class KillCountTracker
 	private static final String SHARED_TREASURE_TRAIL_REWARDS = "shared treasure trail rewards";
 	private static final String SCROLL_CASES = "scroll cases";
 
+	// The casket message never says the drop was a rare one, so these are matched by suffix, the
+	// same way as the two pooled tabs above. See AGENTS.md.
+	private static final String RARE_TAB_SUFFIX = " treasure trails (rare)";
+
 	private static final String ARTICLE_PREFIX = "the ";
 
 	private static final String DOOM_OF_MOKHAIOTL = "Doom of Mokhaiotl";
@@ -249,15 +253,18 @@ public class KillCountTracker
 		return new RecentKill(lastBoss, lastKillCount, lastKind);
 	}
 
-	// "Shared Treasure Trail Rewards" and "Scroll Cases" aren't split by clue difficulty in the
-	// dataset, so a completed casket of any tier counts for them - checked separately from
-	// matchesSource/BOSS_ALIASES, which are both about a single fixed tab per source.
+	// "Shared Treasure Trail Rewards", "Scroll Cases" and the three "(Rare)" tabs are all tabs
+	// matchesSource can't reach: the first two aren't split by clue difficulty at all, and a "(Rare)"
+	// tab name is longer than the name the casket message reconstructs, so a substring search for it
+	// can never hit. Kept separate from matchesSource/BOSS_ALIASES, which are both about a single
+	// fixed tab per source. See AGENTS.md.
 	private boolean isClueWildcardMatch(String normalizedSource)
 	{
 		return lastKind == KillCountKind.COMPLETIONS
 			&& lastBoss.endsWith("Treasure Trails")
 			&& (normalizedSource.equals(SHARED_TREASURE_TRAIL_REWARDS)
-				|| normalizedSource.equals(SCROLL_CASES));
+				|| normalizedSource.equals(SCROLL_CASES)
+				|| normalizedSource.endsWith(RARE_TAB_SUFFIX));
 	}
 
 	// Substring-with-word-boundaries rather than equality: the collection log doesn't track raid

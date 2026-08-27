@@ -768,6 +768,39 @@ public class KillCountTrackerTest
 	}
 
 	@Test
+	public void matchesRareClueTabForItsOwnDifficulty()
+	{
+		// matchesSource looks for the source inside the boss name, and a "(Rare)" tab name is the
+		// longer of the two - so it can never hit. Every item on these tabs is rare-only, with no
+		// plain tab to fall back on.
+		fireMessage("You have completed 295 hard Treasure Trails.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Hard Treasure Trails (Rare)"));
+		assertEquals(295, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
+	public void matchesRareClueTabsAcrossDifficulties()
+	{
+		// Deliberately not tier-strict: most rare items sit on two or three of these tabs at once, so
+		// strictness would change nothing for them while costing the count outright on a stale tier.
+		fireMessage("You have completed 126 elite Treasure Trails.");
+
+		assertEquals(126, tracker.killCountFor(List.of("Hard Treasure Trails (Rare)")).getKillCount());
+		assertEquals(126, tracker.killCountFor(List.of("Master Treasure Trails (Rare)")).getKillCount());
+	}
+
+	@Test
+	public void doesNotWildcardMatchRareClueTabsForUnrelatedCompletions()
+	{
+		// Same scoping as the pooled tabs - a raid's "completed X" count must not satisfy a clue tab.
+		fireMessage("Your completed Chambers of Xeric count is: 5.");
+
+		assertNull(tracker.killCountFor(List.of("Master Treasure Trails (Rare)")));
+	}
+
+	@Test
 	public void doesNotWildcardMatchUnrelatedCompletions()
 	{
 		// The wildcard is scoped to sources ending in "Treasure Trails" - a raid's "completed X"

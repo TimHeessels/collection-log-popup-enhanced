@@ -9,6 +9,7 @@ nbactions.xml
 nb-configuration.xml
 nbproject/
 AGENTS.md
+CLAUDE.md
 
 # Real dataset snapshots for local test runs only
 src/test/resources/local-only/

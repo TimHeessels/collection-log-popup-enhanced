@@ -121,4 +121,14 @@ public class DropRateResolverTest
 	{
 		assertTrue(resolver.dropRatesByItemName("Not a real item").isEmpty());
 	}
+
+	// The dataset carries the wiki's "Gull (pet)", but callers key on the chat message's plain
+	// "Gull" - both must find the same rate.
+	@Test
+	public void petSuffixedItemIsFoundByItsSlotName()
+	{
+		assertEquals(resolver.dropProbability("Shellbane gryphon", "Gull (pet)"),
+			resolver.dropProbability("Shellbane gryphon", "Gull"), 0.0000001);
+		assertEquals(1, resolver.dropRatesByItemName("Gull").size());
+	}
 }

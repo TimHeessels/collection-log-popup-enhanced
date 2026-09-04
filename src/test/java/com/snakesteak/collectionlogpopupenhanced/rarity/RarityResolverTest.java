@@ -6,6 +6,7 @@ import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.util.List;
 import java.util.Map;
 import net.runelite.api.ItemComposition;
 import net.runelite.client.game.ItemManager;
@@ -114,6 +115,25 @@ public class RarityResolverTest
 	public void petNameMatchIsCaseInsensitive()
 	{
 		assertEquals(RarityTier.PET, resolver.resolve(-1, "baby MOLE").getTier());
+	}
+
+	// The wiki disambiguates item 31285 as "Gull (pet)", but the log slot - and so the chat
+	// message this is keyed on - reads plain "Gull". Without the alias it tiers as an unknown
+	// item and renders a blank icon.
+	@Test
+	public void petSuffixedDatasetNameIsFoundByItsSlotName()
+	{
+		assertEquals(RarityTier.PET, resolver.resolve(-1, "Gull").getTier());
+		assertEquals(Integer.valueOf(31285), resolver.datasetIdForName("Gull"));
+		assertEquals(List.of("Shellbane Gryphon", "All Pets"), resolver.tabsForItemName("Gull"));
+	}
+
+	// The suffixed name still resolves - it's what ::clogtest and the dataset itself use.
+	@Test
+	public void petSuffixedDatasetNameStillResolvesUnderItsFullName()
+	{
+		assertEquals(RarityTier.PET, resolver.resolve(-1, "Gull (pet)").getTier());
+		assertEquals(Integer.valueOf(31285), resolver.datasetIdForName("Gull (pet)"));
 	}
 
 	// Dataset id 20011: comp_percent 0, tied with 9 other items for the rarest slot in the whole

@@ -1,6 +1,7 @@
 package com.snakesteak.collectionlogpopupenhanced.droprate;
 
 import com.google.common.reflect.TypeToken;
+import com.snakesteak.collectionlogpopupenhanced.CollectionLogSlotNames;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
@@ -104,6 +105,16 @@ public class DropRateResolver
 			{
 				Map<String, Double> itemRates = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
 				itemRates.putAll(items);
+				// Aliased to the log's slot name as well, since callers key on the chat message's
+				// wording rather than the item name (see CollectionLogSlotNames).
+				items.forEach((itemName, rate) ->
+				{
+					String slotName = CollectionLogSlotNames.slotNameOrNull(itemName);
+					if (slotName != null)
+					{
+						itemRates.putIfAbsent(slotName, rate);
+					}
+				});
 				result.put(source, itemRates);
 			});
 		}

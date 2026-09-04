@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 import com.google.common.reflect.TypeToken;
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import com.snakesteak.collectionlogpopupenhanced.CollectionLogSlotNames;
 import com.snakesteak.collectionlogpopupenhanced.droprate.DropRateResolver;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
@@ -482,14 +483,24 @@ public class RarityResolver
 				{
 					return;
 				}
-				idsByName.putIfAbsent(entry.name, id);
-				if (entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(PET_TAB)))
+				boolean isPet = entry.tabs != null && entry.tabs.stream().anyMatch(tab -> tab.equalsIgnoreCase(PET_TAB));
+				// Indexed under the log's slot name as well as the item name where the two differ
+				// (see CollectionLogSlotNames) - every lookup here is keyed on the chat message's wording.
+				for (String name : new String[]{entry.name, CollectionLogSlotNames.slotNameOrNull(entry.name)})
 				{
-					pets.put(entry.name, id);
-				}
-				if (entry.tabs != null)
-				{
-					tabs.put(entry.name, entry.tabs);
+					if (name == null)
+					{
+						continue;
+					}
+					idsByName.putIfAbsent(name, id);
+					if (isPet)
+					{
+						pets.put(name, id);
+					}
+					if (entry.tabs != null)
+					{
+						tabs.put(name, entry.tabs);
+					}
 				}
 			});
 			this.petIdByName = Collections.unmodifiableMap(pets);

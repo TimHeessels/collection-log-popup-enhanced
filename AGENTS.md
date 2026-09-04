@@ -293,6 +293,24 @@ specifically - scored items never need the fallback and would dilute its rarity 
 the inventory or land on the ground, so `ItemIdResolver`'s inventory/ground/GE pipeline can never
 find one. The index comes from the dataset's own "All Pets" tab rather than a hand-maintained list.
 
+**Every name lookup is keyed on the chat message, which carries the log's *slot* name - not always
+the item's.** The two normally coincide, but the wiki appends a disambiguator where an item name is
+already taken: `Gull (pet)`, the Shellbane Gryphon pet, against the plain Gull the slot is called.
+The message reads "New item added to your collection log: Gull", so a dataset keyed only on
+`Gull (pet)` misses on all four lookups at once - `petIdForName` (no PET tier), `datasetIdForName`
+(no id, so a blank icon and 0 gp), `tabsForItemName` (no kill count) and the drop rates. Both
+datasets therefore index each entry under its slot name *as well as* its item name, in
+`CompletionData`'s constructor and `DropRateResolver.normalize` - both via the shared
+`CollectionLogSlotNames`, which is where the suffix itself is defined.
+
+Aliasing rather than editing the name is deliberate: both files are generated from the wiki (see the
+osrs-collection-log-data repo), so a hand-edited name is undone on the next regeneration, and the
+suffixed name is the real item's name that `::clogtest` and the dataset are keyed on. Enumerated
+against `collection-log.json` (1716 items): ` (pet)` is the only such suffix, Gull the only entry
+carrying it, and stripping it collides with no other item name - checked because a collision would
+silently give one name two ids. As with the other enumerations here this is a property of the
+*data*, which is remotely updatable - re-run it before assuming Gull is still the only case.
+
 **`datasetIdForName` runs last on purpose.** Where several ids share a name - Chompy bird hat,
 Ancient page, the Graceful recolours and 16 others, all cosmetic variants - the lowest id wins,
 which is a representative sprite rather than necessarily the variant actually unlocked. Whenever the

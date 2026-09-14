@@ -323,22 +323,30 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		// (e.g. Barrows' kill count source is "Barrows chest", but its drop rate source is "Chest
 		// (Barrows)") - so a source-scoped miss falls back to the item-name-wide lookup rather than
 		// giving up, same as when there's no known source at all.
-		Double dropProbability = source != null ? dropRateResolver.dropProbability(source, itemName) : null;
-		if (dropProbability == null)
+		// The source-scoped lookup carries the " (max)" twin's rate too where there is one, so a
+		// scaling drop shows both ends rather than just the base (see DropRateResolver.SourceRate).
+		DropRateResolver.SourceRate sourceRate = source != null ? dropRateResolver.dropRateFor(source, itemName) : null;
+		if (sourceRate == null)
 		{
-			dropProbability = dropRateResolver.dropProbabilityByItemName(itemName);
+			sourceRate = dropRateResolver.soleSourceRate(itemName);
 		}
+		Double dropProbability = sourceRate != null && sourceRate.getMaxProbability() == null
+			? sourceRate.getProbability()
+			: null;
 		// A drop from more than one tracked source has no single rate to show - collect every
 		// candidate instead so the overlay can display them all (see CollectionLogOverlay).
-		List<DropRateResolver.SourceRate> ambiguousDropRates = dropProbability == null
-			? dropRateResolver.dropRatesByItemName(itemName)
-			: List.of();
+		// A single source with a rate range lands here too, not just a drop from several sources -
+		// both render as a range, so the overlay needs no notion of which case it is.
+		List<DropRateResolver.SourceRate> ambiguousDropRates = dropProbability != null
+			? List.of()
+			: sourceRate != null ? List.of(sourceRate) : dropRateResolver.dropRatesByItemName(itemName);
 
 		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {} {}, drop probability {}, ambiguous rates {})",
 			itemName, itemId, resolvedVia, result, killCount, killCountKind, dropProbability, ambiguousDropRates);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, source, dropProbability, ambiguousDropRates);
+			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, source,
+			kill != null ? kill.getSecondaryCount() : null, dropProbability, ambiguousDropRates);
 	}
 
 	@Provides

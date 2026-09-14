@@ -37,8 +37,12 @@ public enum KillCountKind
 	SUCCESSES("Successes: "),
 	/** Barbarian Assault. */
 	TICKETS("Tickets: "),
-	/** Doom of Mokhaiotl - only delve 8+ is counted at all. */
+	/** Doom of Mokhaiotl delve 8+, the only delve depth the game emits a count message for. */
 	DEEP_DELVES("Deep delves: "),
+	/** Doom of Mokhaiotl below delve 8, where there is no count message - read from a varp instead. */
+	DELVES("Delves: "),
+	/** Doom of Mokhaiotl, both counts at once: "Delves (Deep): " / "55 (9)", or "6 (0)" with none. */
+	DELVES_WITH_DEEP("Delves (Deep): "),
 	/** Guardians of the Rift. */
 	RIFTS("Rifts: "),
 	/** Hallowed Sepulchre floor completions. */

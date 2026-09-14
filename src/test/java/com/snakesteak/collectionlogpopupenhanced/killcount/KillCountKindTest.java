@@ -56,6 +56,7 @@ public class KillCountKindTest
 		assertEquals("Kills: ", KillCountKind.KILLS.labelFor("hard Treasure Trails"));
 		assertEquals("Chests: ", KillCountKind.CHESTS.labelFor("Tombs of Amascut: Expert Mode"));
 		assertEquals("Rumours: ", KillCountKind.RUMOURS.labelFor("Hunter Guild"));
+		assertEquals("Delves: ", KillCountKind.DELVES.labelFor("Doom of Mokhaiotl"));
 	}
 
 	// A tier the table doesn't know renders the generic label rather than a raw, unbudgeted one.

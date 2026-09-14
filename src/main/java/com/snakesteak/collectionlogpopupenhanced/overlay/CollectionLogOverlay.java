@@ -19,6 +19,8 @@ import java.awt.Shape;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.Rectangle2D;
 import java.awt.image.BufferedImage;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -26,6 +28,7 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Deque;
 import java.util.EnumMap;
+import java.util.DoubleSummaryStatistics;
 import java.util.List;
 import java.util.Map;
 import javax.imageio.ImageIO;
@@ -307,11 +310,19 @@ public class CollectionLogOverlay extends Overlay
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
+		enqueue(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount, killCountKind,
+			killCountSource, null, dropProbability, ambiguousDropRates);
+	}
+
+	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
+		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
+		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
+	{
 		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
 		// batch - the only one that plays a sound when bulkUnlockSfx is on.
 		boolean batchStart = queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
-			killCountKind, killCountSource, dropProbability, ambiguousDropRates, batchStart));
+			killCountKind, killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, batchStart));
 	}
 
 	public void clear()
@@ -604,14 +615,17 @@ public class CollectionLogOverlay extends Overlay
 
 		// A stat with more than 1 value line (an ambiguous Drop rate - see PanelStat#DROP_RATE) uses
 		// a smaller font and tighter line spacing so both still fit above the item name.
-		boolean multiLine = stat.getValueLines().size() > 1;
+		// Measured against the real font rather than guessed from length: the compact form loses
+		// digits, so it is only worth reaching for when the exact one genuinely would not fit.
+		List<String> valueLines = fittingValueLines(graphics, stat);
+		boolean multiLine = valueLines.size() > 1;
 		Font valueFont = multiLine ? cornerMultiValueFont : valueMetrics.getFont();
 		FontMetrics activeValueMetrics = multiLine ? graphics.getFontMetrics(valueFont) : valueMetrics;
 		int lineHeight = multiLine ? cornerMultiValueLineHeight : 0;
 
 		graphics.setFont(valueFont);
 		int valueY = multiLine ? cornerMultiValueFirstBaselineY : cornerValueBaselineY;
-		for (String rawLine : stat.getValueLines())
+		for (String rawLine : valueLines)
 		{
 			// Only the multi-line case bothers truncating - a fraction's denominator has no
 			// natural length cap, unlike the usual single-line stats.
@@ -619,6 +633,22 @@ public class CollectionLogOverlay extends Overlay
 			drawOutlinedString(graphics, line, rightAligned ? edgeX - activeValueMetrics.stringWidth(line) : edgeX, valueY, stat.getValueColor());
 			valueY += lineHeight;
 		}
+	}
+
+	/**
+	 * @return the stat's compact value lines where its exact ones would overflow the corner and a
+	 *         compact form exists, else the exact ones. Only the single-line case is checked - a
+	 *         multi-line stat is already truncated per line as it is drawn.
+	 */
+	private List<String> fittingValueLines(Graphics2D graphics, Stat stat)
+	{
+		List<String> exact = stat.getValueLines();
+		if (stat.getCompactValueLines() == null || exact.size() != 1)
+		{
+			return exact;
+		}
+		FontMetrics metrics = graphics.getFontMetrics(cornerValueFont);
+		return metrics.stringWidth(exact.get(0)) <= cornerTextMaxWidth ? exact : stat.getCompactValueLines();
 	}
 
 	private void advance(long now)
@@ -779,6 +809,10 @@ public class CollectionLogOverlay extends Overlay
 				// mode (see KillCountKind). Count and kind always arrive together, so the fallback is
 				// only a guard against a future caller supplying one without the other.
 				KillCountKind killCountKind = item.getKillCountKind() != null ? item.getKillCountKind() : KillCountKind.KILLS;
+				if (item.getSecondaryKillCount() != null)
+				{
+					killCountText += " (" + QuantityFormatter.formatNumber(item.getSecondaryKillCount()) + ")";
+				}
 				return new Stat(killCountKind.labelFor(item.getKillCountSource()), List.of(killCountText), opaque(config.colourStatValue()));
 			case DROP_RATE:
 				if (item.getDropProbability() != null)
@@ -792,12 +826,29 @@ public class CollectionLogOverlay extends Overlay
 				{
 					return null;
 				}
-				double minProbability = ambiguous.stream().mapToDouble(DropRateResolver.SourceRate::getProbability).min().getAsDouble();
-				double maxProbability = ambiguous.stream().mapToDouble(DropRateResolver.SourceRate::getProbability).max().getAsDouble();
-				String rangeText = minProbability == maxProbability
-					? formatFraction(minProbability)
-					: formatFraction(minProbability) + " - " + formatFraction(maxProbability);
-				return new Stat("Drop rate: ", List.of(rangeText), opaque(config.colourStatValue()));
+				// Both ends of every candidate, so a source with a " (max)" twin contributes its
+				// range rather than only its base rate.
+				DoubleSummaryStatistics stats = ambiguous.stream()
+					.flatMap(rate -> rate.probabilities().stream())
+					.mapToDouble(Double::doubleValue)
+					.summaryStatistics();
+				// Ordered by rate, not by which end the dataset calls "max" - for a couple of items
+				// (Little Nightmare, Zalcano shard) the max-scale rate is the rarer one, so taking
+				// the data's own order would render a range that reads backwards.
+				double commonest = stats.getMax();
+				double rarest = stats.getMin();
+				// Commonest first: the denominators then run upwards ("1/540 - 1/1350"), which is
+				// how a rate range is written everywhere else.
+				if (commonest == rarest)
+				{
+					return new Stat("Drop rate: ", List.of(formatFraction(commonest)), opaque(config.colourStatValue()));
+				}
+				// Exact digits by default; the compact form is only reached if the exact one would
+				// run under the icon, which the widest real range does by a few px.
+				String rangeText = formatFraction(commonest) + " - " + formatFraction(rarest);
+				String compactRangeText = formatCompactFraction(commonest) + " - " + formatCompactFraction(rarest);
+				return new Stat("Drop rate: ", List.of(rangeText), opaque(config.colourStatValue()),
+					List.of(compactRangeText));
 			case NONE:
 			default:
 				return null;
@@ -807,6 +858,23 @@ public class CollectionLogOverlay extends Overlay
 	private static String formatFraction(double dropProbability)
 	{
 		return "1/" + formatDenominator(Math.round(1 / dropProbability));
+	}
+
+	// Same fraction, fewer characters: a 4-digit denominator becomes one decimal of k ("1/1232" ->
+	// "1/1.2k"), which is what buys the width back on a range. Only used when the exact form would
+	// overflow, so the precision is lost on the few widest ranges rather than on every one.
+	private static String formatCompactFraction(double dropProbability)
+	{
+		long denominator = Math.round(1 / dropProbability);
+		if (denominator < 1000 || denominator >= 10_000)
+		{
+			return "1/" + formatDenominator(denominator);
+		}
+		String thousands = BigDecimal.valueOf(denominator, 3)
+			.setScale(1, RoundingMode.HALF_UP)
+			.stripTrailingZeros()
+			.toPlainString();
+		return "1/" + thousands + "k";
 	}
 
 	// Panel width doesn't fit long denominators (e.g. "1/313168") without clipping, so anything at or
@@ -888,6 +956,9 @@ public class CollectionLogOverlay extends Overlay
 		Integer killCount;
 		KillCountKind killCountKind;
 		String killCountSource;
+		// Shown in brackets beside killCount where the activity has two counts at once - Doom's
+		// deep delves against its total. Null for every other source.
+		Integer secondaryKillCount;
 		Double dropProbability;
 		List<DropRateResolver.SourceRate> ambiguousDropRates;
 		boolean batchStart;
@@ -906,5 +977,21 @@ public class CollectionLogOverlay extends Overlay
 		String label;
 		List<String> valueLines;
 		Color valueColor;
+		// A shorter rendering of the same value, used only when valueLines would not fit (see
+		// drawCornerStat). Null where there is no shorter form worth showing.
+		List<String> compactValueLines;
+
+		Stat(String label, List<String> valueLines, Color valueColor)
+		{
+			this(label, valueLines, valueColor, null);
+		}
+
+		Stat(String label, List<String> valueLines, Color valueColor, List<String> compactValueLines)
+		{
+			this.label = label;
+			this.valueLines = valueLines;
+			this.valueColor = valueColor;
+			this.compactValueLines = compactValueLines;
+		}
 	}
 }

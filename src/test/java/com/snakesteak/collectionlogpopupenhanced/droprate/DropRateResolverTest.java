@@ -11,6 +11,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -74,6 +75,23 @@ public class DropRateResolverTest
 	{
 		assertEquals(resolver.dropProbability("Abyssal Sire", "Unsired"),
 			resolver.dropProbability("Abyssal Sire", "UNSIRED"), 0.0001);
+	}
+
+	// The chat message carries the log's slot name, which for some items adds a charge-state suffix
+	// the dataset does not - "Eye of Ayak (uncharged)" against a plain "Eye of Ayak" entry. Without
+	// the alias the drop rate misses alongside the kill count. See CollectionLogSlotNames.
+	@Test
+	public void unchargedSlotNameFallsBackToThePlainDatasetName()
+	{
+		assertEquals(resolver.dropProbability("Doom of Mokhaiotl", "Demon tear"),
+			resolver.dropProbability("Doom of Mokhaiotl", "Demon tear (uncharged)"), 0.0001);
+	}
+
+	// An entry the dataset already stores *with* the suffix must still resolve under it.
+	@Test
+	public void datasetNamesThatCarryTheUnchargedSuffixStillResolve()
+	{
+		assertNotNull(resolver.dropProbability("Monumental chest", "Scythe of vitur (uncharged)"));
 	}
 
 	@Test

@@ -73,7 +73,7 @@ public class RarityResolver
 	 */
 	Integer petIdForName(String name)
 	{
-		return completionData.petIdByName.get(name);
+		return lookup(completionData.petIdByName, name);
 	}
 
 	/**
@@ -83,7 +83,7 @@ public class RarityResolver
 	 */
 	public Integer datasetIdForName(String name)
 	{
-		return completionData.idByItemName.get(name);
+		return lookup(completionData.idByItemName, name);
 	}
 
 	/**
@@ -93,7 +93,24 @@ public class RarityResolver
 	 */
 	public List<String> tabsForItemName(String itemName)
 	{
-		return completionData.tabsByItemName.getOrDefault(itemName, List.of());
+		List<String> tabs = lookup(completionData.tabsByItemName, itemName);
+		return tabs != null ? tabs : List.of();
+	}
+
+	/**
+	 * Every dataset lookup is keyed on the chat message's wording, which is the log's slot name - so
+	 * a name the dataset stores without the slot's charge-state suffix needs a second try. See
+	 * CollectionLogSlotNames.
+	 */
+	private static <T> T lookup(Map<String, T> byName, String name)
+	{
+		T exact = byName.get(name);
+		if (exact != null)
+		{
+			return exact;
+		}
+		String datasetName = CollectionLogSlotNames.datasetNameOrNull(name);
+		return datasetName != null ? byName.get(datasetName) : null;
 	}
 
 	/**

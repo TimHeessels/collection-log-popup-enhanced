@@ -6,12 +6,16 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.inject.Inject;
 import javax.inject.Singleton;
 import lombok.Value;
+import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.util.Text;
 
@@ -21,6 +25,7 @@ import net.runelite.client.util.Text;
  * <p>See "This Plugin: Kill Count Correlation" in AGENTS.md for why correlation is by name rather
  * than by time, and for the chat-wording quirks the patterns below handle.
  */
+@Slf4j
 @Singleton
 public class KillCountTracker
 {
@@ -111,9 +116,19 @@ public class KillCountTracker
 	// - found by reading raw messages in a client log. See AGENTS.md.
 	private static final Pattern COLOUR_MARKUP_PATTERN = Pattern.compile("<[^<>]*>|@[a-zA-Z0-9_]+@");
 
+	// Only here for the Doom delve count below, which is the one count read from game state rather
+	// than from a chat message.
+	private final Client client;
+
 	private String lastBoss;
 	private int lastKillCount;
 	private KillCountKind lastKind;
+
+	@Inject
+	public KillCountTracker(Client client)
+	{
+		this.client = client;
+	}
 
 	// HOPPING is excluded on purpose - a hop keeps the same character, and deferred loot legitimately
 	// survives one. See AGENTS.md.
@@ -231,9 +246,88 @@ public class KillCountTracker
 	/**
 	 * @param candidateSources every collection log tab the item appears on
 	 * @return the most recent kill count if its boss name matches any of {@code candidateSources},
-	 *         else null. Matching is case-insensitive, alias- and article-aware.
+	 *         else the Doom delve count if this is a Doom item, else null. Matching is
+	 *         case-insensitive, alias- and article-aware.
 	 */
 	public RecentKill killCountFor(Collection<String> candidateSources)
+	{
+		// Doom is checked first, unlike every other source: it is the one activity with two counts
+		// worth showing at once, and the delve path carries both. A deep-delve chat message would
+		// otherwise win and render the deep count alone, dropping the total the player also wants.
+		RecentKill delveCount = delveCountFor(candidateSources);
+		if (delveCount != null)
+		{
+			return delveCount;
+		}
+		return chatKillFor(candidateSources);
+	}
+
+	/**
+	 * Doom below delve 8 emits no count message, so there is no stored kill for this to match - the
+	 * count comes from a varp instead. See "This Plugin: Kill Count Correlation" in AGENTS.md.
+	 */
+	private RecentKill delveCountFor(Collection<String> candidateSources)
+	{
+		if (!candidateSources.contains(DOOM_OF_MOKHAIOTL))
+		{
+			return null;
+		}
+
+		int delves = client.getVarpValue(VarPlayerID.TOTAL_DOM_LEVELS);
+		if (delves <= 0)
+		{
+			// 0 before the varps populate - e.g. a preview fired on the login screen. The overlay
+			// omits the stat entirely on a null count, which beats rendering "Delves: 0".
+			return null;
+		}
+		// 4807 counts every delve at any depth - confirmed in game, where it always equalled the sum
+		// of the per-level buckets. The two halves of the display are meant to be disjoint ("91 (9)"
+		// summing to 100), so the deep count comes out of the total rather than being counted twice.
+		int deepDelves = deepDelveCount();
+		// Clamped rather than subtracted blind: 4816 is unconfirmed (see AGENTS.md), and if it ever
+		// holds something larger than the total this must not render a negative or corrupt the one
+		// number that is verified.
+		int shallowDelves = deepDelves <= delves ? delves - deepDelves : delves;
+		if (deepDelves <= 0)
+		{
+			// No bracket at zero, so the plain "Delves: 15" covers both a player who has done none and
+			// one whose deep count failed to read - 15 is their real delve total either way. The
+			// combined form would instead promise a deep count and then assert it is zero, which is a
+			// claim this cannot stand behind while 4816 is unconfirmed (see AGENTS.md).
+			return new RecentKill(DOOM_OF_MOKHAIOTL, delves, KillCountKind.DELVES);
+		}
+		return new RecentKill(DOOM_OF_MOKHAIOTL, shallowDelves, KillCountKind.DELVES_WITH_DEEP, deepDelves);
+	}
+
+	/**
+	 * The deep-delve (8+) count shown in brackets beside the total - zero where the player has none,
+	 * never null. Read from a varp so it is populated from login rather than only in a session that
+	 * completed one, falling back to the chat count - see AGENTS.md, which records 4816 as the
+	 * unconfirmed part of this.
+	 */
+	private int deepDelveCount()
+	{
+		int deepDelves = client.getVarpValue(VarPlayerID.DOM_LEVEL_8_PLUS_COMPLETIONS);
+		boolean haveChatCount = lastKind == KillCountKind.DEEP_DELVES && DOOM_OF_MOKHAIOTL.equals(lastBoss);
+		// Only a player who has actually done a deep delve can settle whether 4816 holds the deep
+		// total - it reads 0 either way on an account without one, so it cannot be confirmed locally
+		// (see AGENTS.md). Logged only when a chat count is there to compare against, which is
+		// exactly the case that decides it.
+		if (haveChatCount)
+		{
+			log.debug("Doom deep delves: varp 4816 = {}, chat count = {} ({})",
+				deepDelves, lastKillCount,
+				deepDelves == lastKillCount ? "agree - 4816 confirmed"
+					: deepDelves <= 0 ? "varp empty - chat fallback used" : "DISAGREE - 4816 is not the deep total");
+		}
+		if (deepDelves <= 0 && haveChatCount)
+		{
+			deepDelves = lastKillCount;
+		}
+		return Math.max(0, deepDelves);
+	}
+
+	private RecentKill chatKillFor(Collection<String> candidateSources)
 	{
 		if (lastBoss == null)
 		{
@@ -302,5 +396,21 @@ public class KillCountTracker
 		String source;
 		int killCount;
 		KillCountKind kind;
+		// A second count shown in brackets beside the first, where the activity has two the player
+		// cares about at once - Doom's deep delves against its total. Null for every other source.
+		Integer secondaryCount;
+
+		public RecentKill(String source, int killCount, KillCountKind kind)
+		{
+			this(source, killCount, kind, null);
+		}
+
+		public RecentKill(String source, int killCount, KillCountKind kind, Integer secondaryCount)
+		{
+			this.source = source;
+			this.killCount = killCount;
+			this.kind = kind;
+			this.secondaryCount = secondaryCount;
+		}
 	}
 }

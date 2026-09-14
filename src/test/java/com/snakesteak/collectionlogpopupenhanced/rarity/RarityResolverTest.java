@@ -136,6 +136,34 @@ public class RarityResolverTest
 		assertEquals(Integer.valueOf(31285), resolver.datasetIdForName("Gull (pet)"));
 	}
 
+	// The mirror of the Gull case: the dataset stores item 31115 plain as "Eye of Ayak", but the
+	// log slot - and so the chat message - reads "Eye of Ayak (uncharged)". Without the alias both
+	// the tab lookup and the drop rate miss, so the popup loses its kill count and its drop rate
+	// at once. Found by reading a client log against a real unlock.
+	@Test
+	public void unchargedSlotNameIsFoundByItsDatasetName()
+	{
+		assertEquals(Integer.valueOf(31115), resolver.datasetIdForName("Eye of ayak (uncharged)"));
+		assertEquals(List.of("Doom of Mokhaiotl"), resolver.tabsForItemName("Eye of ayak (uncharged)"));
+	}
+
+	// The plain name still resolves - it is what the dataset itself is keyed on.
+	@Test
+	public void unchargedAliasDoesNotBreakThePlainName()
+	{
+		assertEquals(Integer.valueOf(31115), resolver.datasetIdForName("Eye of ayak"));
+		assertEquals(List.of("Doom of Mokhaiotl"), resolver.tabsForItemName("Eye of ayak"));
+	}
+
+	// An entry the dataset already stores *with* the suffix must keep resolving under it, rather
+	// than the alias stripping it and missing - 11 entries are stored that way.
+	@Test
+	public void datasetNamesThatCarryTheUnchargedSuffixStillResolve()
+	{
+		assertEquals(Integer.valueOf(22486), resolver.datasetIdForName("Scythe of vitur (uncharged)"));
+		assertEquals(List.of("Theatre of Blood"), resolver.tabsForItemName("Scythe of vitur (uncharged)"));
+	}
+
 	// Dataset id 20011: comp_percent 0, tied with 9 other items for the rarest slot in the whole
 	// dataset -> percentile 100 under default (unstubbed = zero) prices.
 	@Test

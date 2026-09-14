@@ -2,23 +2,36 @@ package com.snakesteak.collectionlogpopupenhanced.killcount;
 
 import java.util.List;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.gameval.VarPlayerID;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class KillCountTrackerTest
 {
 	private KillCountTracker tracker;
+	private Client client;
 
 	@Before
 	public void before()
 	{
-		tracker = new KillCountTracker();
+		// Unstubbed, getVarpValue returns 0, so the Doom delve count stays dormant for every test
+		// that does not stub it - which is all of the chat-driven ones below.
+		client = mock(Client.class);
+		tracker = new KillCountTracker(client);
+	}
+
+	private void stubDelveCount(int delves)
+	{
+		when(client.getVarpValue(VarPlayerID.TOTAL_DOM_LEVELS)).thenReturn(delves);
 	}
 
 	private void fireMessage(String message)
@@ -342,14 +355,162 @@ public class KillCountTrackerTest
 	}
 
 	@Test
-	public void ignoresDelveProgressMessagesBelowDeepDelveThreshold()
+	public void ignoresDelveProgressMessagesAsChatCounts()
 	{
-		// Delve levels 1-7 don't carry any parseable count - matches the game's own HiScores, which
-		// don't show a kill count until 5 deep delves either. Not something the plugin can work around.
+		// Delve progress messages carry no parseable count, so nothing is stored from them. The count
+		// below delve 8 comes from a varp instead - see showsDelveCountForDoomItemsBelowDeepDelve.
 		fireMessage("Delve level: 8 duration: 2:59. Personal best: 1:10");
 		fireMessage("Delve level 1 - 8 duration: 16:25. Personal best: 9:51");
 
 		assertNull(tracker.killCountFor(List.of("Doom of Mokhaiotl")));
+	}
+
+	@Test
+	public void showsDelveCountForDoomItemsBelowDeepDelve()
+	{
+		stubDelveCount(37);
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals("Doom of Mokhaiotl", kill.getSource());
+		assertEquals(37, kill.getKillCount());
+		assertEquals(KillCountKind.DELVES, kill.getKind());
+	}
+
+	@Test
+	public void showsDeepDelvesBesideTheTotalWhenTheVarpHasThem()
+	{
+		stubDelveCount(55);
+		when(client.getVarpValue(VarPlayerID.DOM_LEVEL_8_PLUS_COMPLETIONS)).thenReturn(9);
+
+		// 4807 counts deep delves too, so the shown total has them taken out: 46 + 9 = 55.
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(46, kill.getKillCount());
+		assertEquals(Integer.valueOf(9), kill.getSecondaryCount());
+		assertEquals(KillCountKind.DELVES_WITH_DEEP, kill.getKind());
+	}
+
+	// 4816 is unconfirmed, so a nonsense value must not corrupt the total, which is verified.
+	@Test
+	public void aDeepCountLargerThanTheTotalDoesNotGoNegative()
+	{
+		stubDelveCount(5);
+		when(client.getVarpValue(VarPlayerID.DOM_LEVEL_8_PLUS_COMPLETIONS)).thenReturn(999);
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(5, kill.getKillCount());
+	}
+
+	// The varp is the primary source so the deep count survives a fresh login, but it is unconfirmed
+	// (see AGENTS.md) - a deep-delve chat message still fills in if it reads 0.
+	@Test
+	public void fallsBackToTheChatDeepCountWhenTheVarpIsZero()
+	{
+		stubDelveCount(55);
+		fireMessage("Deep delves completed: <col=ff0000>9</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(46, kill.getKillCount());
+		assertEquals(Integer.valueOf(9), kill.getSecondaryCount());
+		assertEquals(KillCountKind.DELVES_WITH_DEEP, kill.getKind());
+	}
+
+	// No bracket at zero: "Delves: 55" is true both for a player with no deep delves and for one
+	// whose deep count failed to read, where "55 (0)" would assert they have none. Nothing is
+	// subtracted here either, so the number stays the player's real delve total.
+	@Test
+	public void showsThePlainLabelWhenThereAreNoDeepDelves()
+	{
+		stubDelveCount(55);
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(55, kill.getKillCount());
+		assertNull(kill.getSecondaryCount());
+		assertEquals(KillCountKind.DELVES, kill.getKind());
+	}
+
+	// Every other source has one count, so nothing else may grow a bracketed second number.
+	@Test
+	public void otherSourcesCarryNoSecondaryCount()
+	{
+		fireMessage("Your Zulrah kill count is: <col=ff0000>41</col>.");
+
+		assertNull(tracker.killCountFor(List.of("Zulrah")).getSecondaryCount());
+	}
+
+	@Test
+	public void deepDelveChatCountIsShownBesideTheTotalRatherThanReplacingIt()
+	{
+		// Doom shows both numbers at once ("Delves (Deep): 500 (42)"), so the deep-delve message no
+		// longer displaces the total - it fills the bracketed half. Superseded the earlier behaviour
+		// where whichever arrived last won.
+		stubDelveCount(500);
+		fireMessage("Deep delves completed: <col=ff0000>42</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(458, kill.getKillCount());
+		assertEquals(Integer.valueOf(42), kill.getSecondaryCount());
+		assertEquals(KillCountKind.DELVES_WITH_DEEP, kill.getKind());
+	}
+
+	// The deep-delve message still parses on its own terms - it is the fallback when the varp is 0,
+	// and the only path for a player whose varps have not populated.
+	@Test
+	public void deepDelveChatMessageStillParsesWhenNoDelveTotalIsAvailable()
+	{
+		fireMessage("Deep delves completed: <col=ff0000>42</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(42, kill.getKillCount());
+		assertEquals(KillCountKind.DEEP_DELVES, kill.getKind());
+	}
+
+	@Test
+	public void showsNoDelveCountBeforeTheVarpsPopulate()
+	{
+		// 0 on the login screen, where a preview can fire - rendering "Delves: 0" there would be a lie.
+		assertNull(tracker.killCountFor(List.of("Doom of Mokhaiotl")));
+	}
+
+	@Test
+	public void doesNotShowTheDelveCountForAnUnrelatedTab()
+	{
+		stubDelveCount(37);
+
+		assertNull(tracker.killCountFor(List.of("Zulrah")));
+	}
+
+	@Test
+	public void showsTheDelveCountForAMultiTabDoomItem()
+	{
+		// Dom is on both Doom of Mokhaiotl and All Pets.
+		stubDelveCount(37);
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl", "All Pets"));
+		assertEquals(37, kill.getKillCount());
+		assertEquals(KillCountKind.DELVES, kill.getKind());
+	}
+
+	@Test
+	public void theDelveCountSurvivesReset()
+	{
+		// The varp is game state, not remembered state - unlike a stored chat kill there is nothing
+		// about it to clear, and it is still true after a logout.
+		stubDelveCount(37);
+		tracker.reset();
+
+		assertEquals(37, tracker.killCountFor(List.of("Doom of Mokhaiotl")).getKillCount());
+	}
+
+	@Test
+	public void aStaleChatKillDoesNotBlockTheDelveCount()
+	{
+		// A stored kill for some other boss must fall through to the varp path rather than shadow it.
+		stubDelveCount(37);
+		fireMessage("Your Zulrah kill count is: <col=ff0000>41</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("Doom of Mokhaiotl"));
+		assertEquals(37, kill.getKillCount());
+		assertEquals(KillCountKind.DELVES, kill.getKind());
 	}
 
 	@Test

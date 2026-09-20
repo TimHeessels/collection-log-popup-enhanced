@@ -104,7 +104,7 @@ And it will use your sound instead! (See 'Testing' on how to test if your audio 
 Toggle this setting in Config to show the popup upon opening the chest (Or the Storage unit outside) instead of the moment of completing a raid. Use in conjucture with [CoX special loot hider](https://runelite.net/plugin-hub/show/cox-special-loot-hider)
 
 > [!CAUTION]
-> Using this setting + the loot hider plugin will no longer automaticall save collection log screenshots for CoX specific items.
+> Using this setting + the loot-hider-plugin, might break the automatically screenshotting of collection logs from Chambers of Xerics.
 
 ![alt text](CoX-Delay.png)
 

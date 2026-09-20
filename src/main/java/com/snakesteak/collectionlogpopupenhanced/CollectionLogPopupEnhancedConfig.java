@@ -58,10 +58,29 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	String coloursSection = "coloursSection";
 
+	@ConfigSection(
+		name = "Miscellaneous",
+		description = "Small tweaks",
+		position = 6
+	)
+	String tweaksSection = "tweaksSection";
+
+	@ConfigItem(
+		keyName = "previewTier",
+		name = "Preview popup",
+		description = "Shows a random item popup of the selected tier",
+		position = 0,
+		section = previewSection
+	)
+	default PreviewTier previewTier()
+	{
+		return PreviewTier.NONE;
+	}
+
 	@ConfigItem(
 		keyName = "rarityBasis",
 		name = "Rarity based on",
-		description = "What the rarity tiers are based on.",
+		description = "What the rarity tiers are based on",
 		position = 0,
 		section = raritySection
 	)
@@ -110,6 +129,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "leftPanelStat",
 		name = "Left statistic",
 		description = "Which statistic to show on the left side of the panel",
+		position = 0,
 		section = overlaySection
 	)
 	default LeftPanelStat leftPanelStat()
@@ -121,6 +141,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "valueDisplayMode",
 		name = "Value shown as",
 		description = "Prefer to display value statistic as high alch or G.E.",
+		position = 1,
 		section = overlaySection
 	)
 	default ValueDisplayMode valueDisplayMode()
@@ -132,6 +153,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "rightPanelStat",
 		name = "Right statistic",
 		description = "Which statistic to show on the right side of the panel",
+		position = 2,
 		section = overlaySection
 	)
 	default RightPanelStat rightPanelStat()
@@ -143,8 +165,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "bulkUnlockSfx",
 		name = "Bulk unlock SFX",
 		description = "When multiple items unlock at once, play a single sound instead",
-		section = audioSection,
-		position = 0
+		position = 0,
+		section = audioSection
 	)
 	default boolean bulkUnlockSfx()
 	{
@@ -153,10 +175,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "soundEnabledCommon",
-		name = "Play audio effect for common items",
-		description = "Play a sound effect on common collection logs slots.",
-		section = audioSection,
-		position = 1
+		name = "Play audio for common unlocks",
+		description = "Play a sound effect on common collection log slots",
+		position = 1,
+		section = audioSection
 	)
 	default boolean soundEnabledCommon()
 	{
@@ -167,9 +189,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeCommon",
 		name = "Common volume",
-		description = "Volume of the Common-tier sound effect, 0-100.",
-		section = audioSection,
-		position = 2
+		description = "Volume of the common-tier sound effect, 0-100",
+		position = 2,
+		section = audioSection
 	)
 	default int soundVolumeCommon()
 	{
@@ -178,10 +200,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "soundEnabledUncommon",
-		name = "Play audio effect for uncommon items",
-		description = "Play a sound effect on uncommon collection logs slots.",
-		section = audioSection,
-		position = 3
+		name = "Play audio for uncommon unlocks",
+		description = "Play a sound effect on uncommon collection log slots",
+		position = 3,
+		section = audioSection
 	)
 	default boolean soundEnabledUncommon()
 	{
@@ -192,9 +214,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeUncommon",
 		name = "Uncommon volume",
-		description = "Volume of the Uncommon-tier sound effect, 0-100.",
-		section = audioSection,
-		position = 4
+		description = "Volume of the uncommon-tier sound effect, 0-100",
+		position = 4,
+		section = audioSection
 	)
 	default int soundVolumeUncommon()
 	{
@@ -203,10 +225,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "soundEnabledRare",
-		name = "Play audio effect for rare items",
-		description = "Play a sound effect on rare collection logs slots.",
-		section = audioSection,
-		position = 5
+		name = "Play audio for rare unlocks",
+		description = "Play a sound effect on rare collection log slots",
+		position = 5,
+		section = audioSection
 	)
 	default boolean soundEnabledRare()
 	{
@@ -217,9 +239,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeRare",
 		name = "Rare volume",
-		description = "Volume of the Rare-tier sound effect, 0-100.",
-		section = audioSection,
-		position = 6
+		description = "Volume of the rare-tier sound effect, 0-100",
+		position = 6,
+		section = audioSection
 	)
 	default int soundVolumeRare()
 	{
@@ -228,10 +250,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "soundEnabledVeryRare",
-		name = "Play audio effect for very rare items",
-		description = "Play a sound effect on very-rare collection logs slots.",
-		section = audioSection,
-		position = 7
+		name = "Play audio for very rare unlocks",
+		description = "Play a sound effect on very rare collection log slots",
+		position = 7,
+		section = audioSection
 	)
 	default boolean soundEnabledVeryRare()
 	{
@@ -242,9 +264,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumeVeryRare",
 		name = "Very rare volume",
-		description = "Volume of the Very rare-tier sound effect, 0-100.",
-		section = audioSection,
-		position = 8
+		description = "Volume of the very rare-tier sound effect, 0-100",
+		position = 8,
+		section = audioSection
 	)
 	default int soundVolumeVeryRare()
 	{
@@ -253,10 +275,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "soundEnabledPet",
-		name = "Play audio effect for pets",
+		name = "Play audio for pets",
 		description = "Play a sound effect when a new pet is unlocked",
-		section = audioSection,
-		position = 9
+		position = 9,
+		section = audioSection
 	)
 	default boolean soundEnabledPet()
 	{
@@ -267,9 +289,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "soundVolumePet",
 		name = "Pet volume",
-		description = "Volume of the pet sound effect, 0-100. Also applies to a custom pet.wav",
-		section = audioSection,
-		position = 10
+		description = "Volume of the pet sound effect, 0-100.",
+		position = 10,
+		section = audioSection
 	)
 	default int soundVolumePet()
 	{
@@ -279,7 +301,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "showProgressBar",
 		name = "Show progress bar",
-		description = "Show your clog progress in the center bar.",
+		description = "Show your collection log progress in the center bar",
+		position = 0,
 		section = appearanceSection
 	)
 	default boolean showProgressBar()
@@ -291,6 +314,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "overlayDisplaySeconds",
 		name = "Overlay display duration (seconds)",
 		description = "How long each new collection log item stays on screen",
+		position = 1,
 		section = appearanceSection
 	)
 	default int overlayDisplaySeconds()
@@ -303,6 +327,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "overlayScalePercent",
 		name = "Popup scale (%)",
 		description = "Size of the popup",
+		position = 2,
 		section = appearanceSection
 	)
 	default int overlayScalePercent()
@@ -314,6 +339,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "textRenderMode",
 		name = "Text rendering",
 		description = "How popup text is rendered",
+		position = 3,
 		section = appearanceSection
 	)
 	default TextRenderMode textRenderMode()
@@ -322,22 +348,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "previewTier",
-		name = "Preview popup",
-		description = "Shows a random item popup of the selected tier",
-		position = 0,
-		section = previewSection
-	)
-	default PreviewTier previewTier()
-	{
-		return PreviewTier.NONE;
-	}
-
-	@ConfigItem(
 		keyName = "colourCommonTier",
-		position = 0,
 		name = "Common",
-		description = "Panel color for common tier",
+		description = "Panel colour for common tier",
+		position = 0,
 		section = coloursSection
 	)
 	default Color colourCommonTier()
@@ -347,9 +361,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourUncommonTier",
-		position = 1,
 		name = "Uncommon",
-		description = "Panel color for uncommon tier",
+		description = "Panel colour for uncommon tier",
+		position = 1,
 		section = coloursSection
 	)
 	default Color colourUncommonTier()
@@ -359,9 +373,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourRareTier",
-		position = 2,
 		name = "Rare",
-		description = "Panel color for rare tier.",
+		description = "Panel colour for rare tier",
+		position = 2,
 		section = coloursSection
 	)
 	default Color colourRareTier()
@@ -371,9 +385,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourVeryRareTier",
-		position = 3,
 		name = "Very rare",
-		description = "Panel color for very rare tier",
+		description = "Panel colour for very rare tier",
+		position = 3,
 		section = coloursSection
 	)
 	default Color colourVeryRareTier()
@@ -383,9 +397,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourPetTier",
-		position = 4,
 		name = "Pet",
-		description = "Panel color for pets.",
+		description = "Panel colour for pets",
+		position = 4,
 		section = coloursSection
 	)
 	default Color colourPetTier()
@@ -396,9 +410,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@Range(min = 10, max = 60)
 	@ConfigItem(
 		keyName = "backgroundDarkness",
-		position = 5,
 		name = "Background darkness (%)",
-		description = "How dark the panel background is relative to its tier colour.",
+		description = "How dark the panel background is relative to its tier colour",
+		position = 5,
 		section = coloursSection
 	)
 	default int backgroundDarkness()
@@ -408,9 +422,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourCaption",
-		position = 6,
 		name = "Caption text",
-		description = "Colour of the Collection log slot caption",
+		description = "Colour of the collection log slot caption",
+		position = 6,
 		section = coloursSection
 	)
 	default Color colourCaption()
@@ -420,9 +434,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourStatLabel",
-		position = 7,
 		name = "Statistic labels",
-		description = "Colour of the bottom-corner statistic labels.",
+		description = "Colour of the bottom-corner statistic labels",
+		position = 7,
 		section = coloursSection
 	)
 	default Color colourStatLabel()
@@ -432,13 +446,27 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "colourStatValue",
-		position = 8,
 		name = "Statistic values",
-		description = "Colour of the bottom-corner statistic values.",
+		description = "Colour of the bottom-corner statistic values",
+		position = 8,
 		section = coloursSection
 	)
 	default Color colourStatValue()
 	{
 		return new Color(0xFFCD2D);
 	}
+
+	@ConfigItem(
+    keyName = "delayCoxPopupUntilChest",
+    name = "Delay CoX popups until chest",
+    description = "Use in combination with a CoX censor plugin.",
+    warning = "Please note that using this might break automatic collection log screenshotting for clogs from the CoX chest.",
+    position = 0,
+    section = tweaksSection
+)
+	default boolean delayCoxPopupUntilChest()
+	{
+		return false;
+	}
+	
 }

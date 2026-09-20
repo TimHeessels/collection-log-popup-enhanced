@@ -1,6 +1,22 @@
 # Collection Log Popup Enhanced
 Displays a popup and (optional) sound effect based on rarity on new collection logs.
 
+- [Setup](#setup)
+- [Default visuals](#default-visuals)
+- [Testing](#testing)
+- [Rarity tiers](#rarity-tiers)
+- [Appearance](#appearance)
+  - [Scaling](#scaling)
+  - [Colors](#colors)
+  - [Progress bar](#progress-bar)
+- [Statistics](#statistics)
+- [Audio](#audio)
+  - [Volume](#volume)
+  - [Custom sounds](#custom-sounds)
+- [Chambers of Xerics - Delay](#chambers-of-xerics---delay)
+- [Native popups and screenshots](#native-popups-and-screenshots)
+- [Thanks to:](#thanks-to)
+
 # Setup
 In settings menu, enable:
 1. 'Collection log - New addition notification'
@@ -83,6 +99,14 @@ Want to use your own sound effects instead? Place any or all '.wav' files into '
 
 And it will use your sound instead! (See 'Testing' on how to test if your audio works)
 (Note: if it doesn't play a sound and the spelling is correct, your audio file is not supported, try another.)
+
+# Chambers of Xerics - Delay
+Toggle this setting in Config to show the popup upon opening the chest (Or the Storage unit outside) instead of the moment of completing a raid. Use in conjucture with [CoX special loot hider](https://runelite.net/plugin-hub/show/cox-special-loot-hider)
+
+> [!CAUTION]
+> Using this setting + the loot hider plugin will no longer automaticall save collection log screenshots for CoX specific items.
+
+![alt text](CoX-Delay.png)
 
 # Native popups and screenshots
 The native popup (the default one in the official client) has to be active in runescape settings, as the build in screenshot tool (taking a screenshot upon getting a new collection log) actually waits for the panel to be fully open, but only when this toggle is active. 

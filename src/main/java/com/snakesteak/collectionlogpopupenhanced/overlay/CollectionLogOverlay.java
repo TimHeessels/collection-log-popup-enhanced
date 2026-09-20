@@ -29,11 +29,15 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.DoubleSummaryStatistics;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.Value;
 import net.runelite.api.Client;
 import net.runelite.api.gameval.VarPlayerID;
@@ -318,17 +322,51 @@ public class CollectionLogOverlay extends Overlay
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
+		enqueue(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount, killCountKind,
+			killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, false);
+	}
+
+	/**
+	 * @param held holds the item back until {@link #releaseHeld()} instead of showing it in turn -
+	 *             see CollectionLogPopupEnhancedPlugin's CoX chest handling.
+	 */
+	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
+		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
+		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates,
+		boolean held)
+	{
 		// The overlay was fully idle right before this item arrived, so it's the first of a fresh
-		// batch - the only one that plays a sound when bulkUnlockSfx is on.
-		boolean batchStart = queue.isEmpty() && current == null;
+		// batch - the only one that plays a sound when bulkUnlockSfx is on. A held item can't claim
+		// this: it shows later, so #releaseHeld works it out again at the point it's let through.
+		boolean batchStart = !held && queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
-			killCountKind, killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, batchStart));
+			killCountKind, killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, batchStart, held));
 	}
 
 	public void clear()
 	{
 		queue.clear();
 		current = null;
+	}
+
+	/**
+	 * Lets every held item through, in the order it was unlocked.
+	 */
+	public void releaseHeld()
+	{
+		// Whether the first released item opens a batch can't be decided at enqueue time - items may
+		// have come and gone while it was held - so it's recomputed here against the state now.
+		boolean batchStart = current == null && queue.stream().allMatch(PendingItem::isHeld);
+		for (PendingItem item : queue)
+		{
+			if (!item.isHeld())
+			{
+				continue;
+			}
+			item.setHeld(false);
+			item.setBatchStart(batchStart);
+			batchStart = false;
+		}
 	}
 
 	/**
@@ -651,11 +689,29 @@ public class CollectionLogOverlay extends Overlay
 		return metrics.stringWidth(exact.get(0)) <= cornerTextMaxWidth ? exact : stat.getCompactValueLines();
 	}
 
+	/**
+	 * Skips past held items rather than stopping at the head: the queue is FIFO, so a CoX item
+	 * waiting on the chest would otherwise block every later unlock behind it.
+	 */
+	private PendingItem pollFirstUnheld()
+	{
+		for (Iterator<PendingItem> it = queue.iterator(); it.hasNext(); )
+		{
+			PendingItem item = it.next();
+			if (!item.isHeld())
+			{
+				it.remove();
+				return item;
+			}
+		}
+		return null;
+	}
+
 	private void advance(long now)
 	{
 		if (current == null)
 		{
-			current = queue.pollFirst();
+			current = pollFirstUnheld();
 			if (current != null)
 			{
 				notificationStartMillis = now;
@@ -943,25 +999,31 @@ public class CollectionLogOverlay extends Overlay
 		return color.getAlpha() == 0xFF ? color : new Color(color.getRGB() & RGB_MASK);
 	}
 
-	@Value
+	// Not @Value like the others here: #releaseHeld rewrites batchStart and held after construction,
+	// so only those two carry a setter and the rest stay read-only.
+	@Getter
+	@AllArgsConstructor
 	private static class PendingItem
 	{
-		String itemName;
-		int itemId;
-		RarityTier tier;
-		int price;
-		boolean highAlch;
-		int alchPrice;
-		Double compPercent;
-		Integer killCount;
-		KillCountKind killCountKind;
-		String killCountSource;
+		private final String itemName;
+		private final int itemId;
+		private final RarityTier tier;
+		private final int price;
+		private final boolean highAlch;
+		private final int alchPrice;
+		private final Double compPercent;
+		private final Integer killCount;
+		private final KillCountKind killCountKind;
+		private final String killCountSource;
 		// Shown in brackets beside killCount where the activity has two counts at once - Doom's
 		// deep delves against its total. Null for every other source.
-		Integer secondaryKillCount;
-		Double dropProbability;
-		List<DropRateResolver.SourceRate> ambiguousDropRates;
-		boolean batchStart;
+		private final Integer secondaryKillCount;
+		private final Double dropProbability;
+		private final List<DropRateResolver.SourceRate> ambiguousDropRates;
+		@Setter
+		private boolean batchStart;
+		@Setter
+		private boolean held;
 	}
 
 	@Value

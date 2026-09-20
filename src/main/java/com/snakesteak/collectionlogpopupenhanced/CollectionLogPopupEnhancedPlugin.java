@@ -12,6 +12,7 @@ import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
@@ -22,6 +23,7 @@ import net.runelite.api.events.BeforeRender;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.Widget;
@@ -50,6 +52,30 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	// Matched against VarClientID.NOTIFICATION_TITLE to tell our notification apart from the combat
 	// task and league task ones that share the same widget. Same string ScreenshotPlugin matches on.
 	private static final String COLLECTION_LOG_NOTIFICATION_TITLE = "Collection log";
+
+	// Items that should be delayed to be found in the chest (if config active)
+	private static final Set<String> COX_CHEST_UNIQUES = Set.of(
+		"Dexterous prayer scroll",
+		"Arcane prayer scroll",
+		"Twisted buckler",
+		"Dragon hunter crossbow",
+		"Dinh's bulwark",
+		"Ancestral hat",
+		"Ancestral robe top",
+		"Ancestral robe bottom",
+		"Dragon claws",
+		"Elder maul",
+		"Kodai insignia",
+		"Twisted bow"
+	);
+
+	// Opening any of these reveals the raid's loot, so a held popup is no longer a spoiler. Private
+	// storage and the bank cover leaving the raid without looting the chest.
+	private static final int[] COX_LOOT_REVEAL_INTERFACES = {
+		InterfaceID.RAIDS_REWARDS,
+		InterfaceID.RAIDS_STORAGE_PRIVATE,
+		InterfaceID.BANKMAIN,
+	};
 
 	// The notification's painted widgets. UNIVERSE, CONTAINER and CONTENT are excluded on purpose -
 	// the open animation resizes those, and hiding one stalls it before the screenshot fires.
@@ -202,6 +228,24 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		}
 	}
 
+	/**
+	 * Releases popups held by the "delay CoX popups until chest" option. A held item is deliberately
+	 * session-only: nothing re-shows it after a client restart, which is accepted rather than worth
+	 * a logout-release path, since the chest is opened within a minute or two in practice.
+	 */
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded widgetLoaded)
+	{
+		for (int interfaceId : COX_LOOT_REVEAL_INTERFACES)
+		{
+			if (widgetLoaded.getGroupId() == interfaceId)
+			{
+				collectionLogOverlay.releaseHeld();
+				return;
+			}
+		}
+	}
+
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage)
 	{
@@ -344,9 +388,11 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {} {}, drop probability {}, ambiguous rates {})",
 			itemName, itemId, resolvedVia, result, killCount, killCountKind, dropProbability, ambiguousDropRates);
 
+		boolean held = config.delayCoxPopupUntilChest() && COX_CHEST_UNIQUES.contains(itemName);
+
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
 			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, source,
-			kill != null ? kill.getSecondaryCount() : null, dropProbability, ambiguousDropRates);
+			kill != null ? kill.getSecondaryCount() : null, dropProbability, ambiguousDropRates, held);
 	}
 
 	@Provides

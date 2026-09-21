@@ -46,7 +46,9 @@ public class CollectionLogOverlayHoldTest
 		CollectionLogPopupEnhancedConfig config = mock(CollectionLogPopupEnhancedConfig.class);
 		soundManager = mock(SoundManager.class);
 
-		when(client.isResized()).thenReturn(true);
+		// Unstubbed these return 0, sending render() down its degenerate-viewport fallback.
+		when(client.getViewportXOffset()).thenReturn(4);
+		when(client.getViewportWidth()).thenReturn(1272);
 		when(client.getRealDimensions()).thenReturn(new Dimension(1280, 720));
 
 		when(config.overlayScalePercent()).thenReturn(100);

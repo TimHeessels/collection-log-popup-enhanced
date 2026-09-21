@@ -198,9 +198,9 @@ public class CollectionLogOverlay extends Overlay
 		// overlay (e.g. xp orb/drop plugins), so this panel always stays pinned at the very top.
 		setLayer(OverlayLayer.ABOVE_WIDGETS);
 		setPriority(PRIORITY_HIGHEST);
-		// The panel recenters itself on the real canvas width every frame (see #render) to line up
-		// with the native collection log popup, so letting the user drag/snap it elsewhere would just
-		// get silently undone next frame - disable that instead of leaving it non-functional.
+		// The panel recenters itself on the viewport every frame (see #render) to line up with the
+		// native collection log popup, so letting the user drag/snap it elsewhere would just get
+		// silently undone next frame - disable that instead of leaving it non-functional.
 		setMovable(false);
 
 		sourceBackgrounds.put(RarityTier.COMMON, loadImage("Backgrounds/BackgroundPanel1.png"));
@@ -397,19 +397,12 @@ public class CollectionLogOverlay extends Overlay
 			applyColours(colours);
 		}
 
-		// TOP_CENTER centers on the HUD container widget, not the client canvas, so it doesn't line
-		// up with the native (canvas-centered) popup this overlaps. An absolute location bypasses
-		// that. Must center on the viewport rect, not the client width: in fixed/classic layout the
-		// viewport is offset left of the sidebar, and client width would skew the panel toward it.
-		int viewportCenterX;
-		if (client.isResized())
-		{
-			viewportCenterX = client.getRealDimensions().width / 2;
-		}
-		else
-		{
-			viewportCenterX = client.getViewportXOffset() + (client.getViewportWidth() / 2);
-		}
+		// Centers on the viewport rect, not the canvas: fixed/classic offsets it left of the sidebar,
+		// and the Fixed Resizable Hybrid plugin narrows it in resizable mode.
+		int viewportWidth = client.getViewportWidth();
+		int viewportCenterX = viewportWidth > 0
+			? client.getViewportXOffset() + viewportWidth / 2
+			: client.getRealDimensions().width / 2;
 		setPreferredLocation(new Point(viewportCenterX - (panelWidth / 2), TOP_MARGIN));
 
 		if (current == null)

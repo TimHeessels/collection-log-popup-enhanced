@@ -13,6 +13,7 @@ import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
@@ -258,7 +259,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (matcher.matches())
 		{
 			String itemName = Text.removeTags(matcher.group(1));
-			handleNewCollectionLogItem(null, itemName);
+			handleNewCollectionLogItem(null, itemName, false);
 		}
 	}
 
@@ -300,7 +301,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		// like "Saradomin page 1", and a trailing number was once read as a kill count override,
 		// which silently truncated them to an item that doesn't exist.
 		String itemName = String.join(" ", args);
-		handleNewCollectionLogItem(null, itemName);
+		handleNewCollectionLogItem(null, itemName, true);
 	}
 
 	private void testRandomDatasetItems(int count)
@@ -320,7 +321,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			int canonicalId = itemManager.canonicalize(itemId);
 			String itemName = itemManager.getItemComposition(canonicalId).getName();
-			handleNewCollectionLogItem(canonicalId, itemName);
+			handleNewCollectionLogItem(canonicalId, itemName, true);
 		}
 	}
 
@@ -335,22 +336,27 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 		int canonicalId = itemManager.canonicalize(itemId);
 		String itemName = itemManager.getItemComposition(canonicalId).getName();
-		handleNewCollectionLogItem(canonicalId, itemName);
+		handleNewCollectionLogItem(canonicalId, itemName, true);
 	}
 
-	private void handleNewCollectionLogItem(Integer knownItemId, String itemName)
+	// "preview" covers both the config-driven preview popup and "::clogtest" - neither corresponds to
+	// a real kill/opening the player just did, so killCountTracker's real correlation (below) never
+	// has anything relevant to attach. Without this flag, every preview item would always fall back to
+	// showing Wiki Comp% regardless of the Left/Right statistic config, since the underlying kill
+	// count field would always be null - see fakeKillCountFor.
+	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, boolean preview)
 	{
 		if (knownItemId != null)
 		{
-			handleResolvedItem(knownItemId, itemName, "known");
+			handleResolvedItem(knownItemId, itemName, "known", preview);
 			return;
 		}
 
 		// Resolution is asynchronous - see ItemIdResolver.resolveIdByName javadoc.
-		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString()));
+		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), preview));
 	}
 
-	private void handleResolvedItem(int itemId, String itemName, String resolvedVia)
+	private void handleResolvedItem(int itemId, String itemName, String resolvedVia, boolean preview)
 	{
 		RarityResult result = rarityResolver.resolve(itemId, itemName);
 
@@ -358,6 +364,10 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		// resolution can be deferred by a tick or more (see ItemIdResolver).
 		List<String> candidateSources = rarityResolver.tabsForItemName(itemName);
 		KillCountTracker.RecentKill kill = killCountTracker.killCountFor(candidateSources);
+		if (kill == null && preview)
+		{
+			kill = fakeKillCountFor(candidateSources);
+		}
 
 		Integer killCount = kill != null ? kill.getKillCount() : null;
 		KillCountKind killCountKind = kill != null ? kill.getKind() : null;
@@ -393,6 +403,26 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
 			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, source,
 			kill != null ? kill.getSecondaryCount() : null, dropProbability, ambiguousDropRates, held);
+	}
+
+	/**
+	 * @return a plausible stand-in {@link KillCountTracker.RecentKill} for a preview/test item, so the
+	 *         Kill count statistic has something to show instead of always falling back to Wiki Comp%.
+	 *         The source is a real candidate source (not a fake string) so the drop rate lookup right
+	 *         after this still resolves normally. {@link KillCountKind#KILLS} is used unconditionally
+	 *         - the point is only to demonstrate roughly what the panel looks like with a number in
+	 *         that slot, not to guess the exact wording a real source would use.
+	 */
+	static KillCountTracker.RecentKill fakeKillCountFor(List<String> candidateSources)
+	{
+		if (candidateSources.isEmpty())
+		{
+			return null;
+		}
+
+		String source = candidateSources.get(0);
+		int fakeCount = 1 + ThreadLocalRandom.current().nextInt(500);
+		return new KillCountTracker.RecentKill(source, fakeCount, KillCountKind.KILLS);
 	}
 
 	@Provides

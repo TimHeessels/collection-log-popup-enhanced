@@ -6,6 +6,7 @@ import com.snakesteak.collectionlogpopupenhanced.droprate.LocalDropRateDatasetLo
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountKind;
 import com.snakesteak.collectionlogpopupenhanced.killcount.KillCountTracker;
 import com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay;
+import com.snakesteak.collectionlogpopupenhanced.overlay.PanelStyle;
 import com.snakesteak.collectionlogpopupenhanced.rarity.ItemIdResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.LocalRarityDatasetLoader;
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
@@ -27,9 +28,11 @@ import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
 import net.runelite.api.widgets.Widget;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
@@ -48,6 +51,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	// name>" runs a specific name through the real detection pipeline, kill count correlation
 	// included. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
+	private static final String CONFIG_GROUP = "collection-log-popup-enhanced";
 
 	// Matched against VarClientID.NOTIFICATION_TITLE to tell our notification apart from the combat
 	// task and league task ones that share the same widget. Same string ScreenshotPlugin matches on.
@@ -90,6 +94,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 	@Inject
 	private Client client;
+
+	@Inject
+	private ClientThread clientThread;
 
 	@Inject
 	private ItemManager itemManager;
@@ -161,12 +168,30 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Subscribe
 	public void onBeforeRender(BeforeRender beforeRender)
 	{
+		if (config.panelStyle() == PanelStyle.AUDIO_ONLY)
+		{
+			return;
+		}
+
 		if (!COLLECTION_LOG_NOTIFICATION_TITLE.equalsIgnoreCase(client.getVarcStrValue(VarClientID.NOTIFICATION_TITLE)))
 		{
 			return;
 		}
 
 		setNativePopupPaintHidden(true);
+	}
+
+	/**
+	 * Switching to Audio only mid-popup would otherwise leave the game's popup hidden until it closes.
+	 */
+	@Subscribe
+	public void onConfigChanged(ConfigChanged configChanged)
+	{
+		if (CONFIG_GROUP.equals(configChanged.getGroup()) && "panelStyle".equals(configChanged.getKey())
+			&& config.panelStyle() == PanelStyle.AUDIO_ONLY)
+		{
+			clientThread.invoke(() -> setNativePopupPaintHidden(false));
+		}
 	}
 
 	/**
@@ -391,7 +416,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		boolean held = config.delayCoxPopupUntilChest() && COX_CHEST_UNIQUES.contains(itemName);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
-			result.getAlchPrice(), result.getCompPercent(), killCount, killCountKind, source,
+			result.getCompPercent(), killCount, killCountKind, source,
 			kill != null ? kill.getSecondaryCount() : null, dropProbability, ambiguousDropRates, held);
 	}
 

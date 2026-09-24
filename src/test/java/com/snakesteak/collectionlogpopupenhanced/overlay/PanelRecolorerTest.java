@@ -26,7 +26,7 @@ public class PanelRecolorerTest
 
 	private static BufferedImage load(String resource) throws IOException
 	{
-		try (InputStream in = PanelRecolorerTest.class.getResourceAsStream("/" + resource))
+		try (InputStream in = PanelRecolorerTest.class.getResourceAsStream("/Colorful/" + resource))
 		{
 			return ImageIO.read(in);
 		}

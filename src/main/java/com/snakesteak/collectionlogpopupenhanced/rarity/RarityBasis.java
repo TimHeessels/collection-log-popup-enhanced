@@ -9,8 +9,7 @@ public enum RarityBasis
 {
 	VALUE("Value"),
 	// Labelled by the signal it uses rather than "Rarity" - every basis produces a rarity tier, so
-	// "Rarity" said nothing about what made this one different. Matches the "Wiki Comp%" stat label
-	// the popup already shows.
+	// "Rarity" said nothing about what made this one different.
 	RARITY("Wiki Comp%"),
 	COMBINATION("Combination");
 

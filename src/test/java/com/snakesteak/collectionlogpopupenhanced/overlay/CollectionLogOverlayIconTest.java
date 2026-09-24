@@ -54,9 +54,9 @@ public class CollectionLogOverlayIconTest
 		when(config.overlayScalePercent()).thenReturn(100);
 		when(config.overlayDisplaySeconds()).thenReturn(5);
 		when(config.backgroundDarkness()).thenReturn(50);
+		when(config.panelStyle()).thenReturn(PanelStyle.COLORFUL);
 		when(config.previewTier()).thenReturn(PreviewTier.NONE);
 		when(config.textRenderMode()).thenReturn(TextRenderMode.SMOOTH);
-		when(config.valueDisplayMode()).thenReturn(ValueDisplayMode.GE_VALUE);
 		when(config.leftPanelStat()).thenReturn(LeftPanelStat.KILL_COUNT);
 		when(config.rightPanelStat()).thenReturn(RightPanelStat.DROP_RATE);
 		when(config.showProgressBar()).thenReturn(true);
@@ -97,7 +97,7 @@ public class CollectionLogOverlayIconTest
 		// The client returns null for an id it has no sprite for, even when the id itself is valid.
 		when(itemManager.getImage(anyInt())).thenReturn(null);
 
-		overlay.enqueue("Guild hunter top", ITEM_ID, RarityTier.COMMON, 480, true, 480, 15.4,
+		overlay.enqueue("Guild hunter top", ITEM_ID, RarityTier.COMMON, 480, true, 15.4,
 			null, null, null, null, List.of());
 
 		renderPastFold();
@@ -113,7 +113,7 @@ public class CollectionLogOverlayIconTest
 		when(sprite.getHeight()).thenReturn(32);
 		when(itemManager.getImage(anyInt())).thenReturn(sprite);
 
-		overlay.enqueue("Guild hunter top", ITEM_ID, RarityTier.COMMON, 480, true, 480, 15.4,
+		overlay.enqueue("Guild hunter top", ITEM_ID, RarityTier.COMMON, 480, true, 15.4,
 			312, KillCountKind.RUMOURS, "Hunter Guild", null, List.of());
 
 		renderPastFold();
@@ -123,7 +123,7 @@ public class CollectionLogOverlayIconTest
 	public void rendersWhenTheItemIdItselfIsUnresolved() throws InterruptedException
 	{
 		// The pre-existing sentinel case: a negative id short-circuits before the sprite lookup.
-		overlay.enqueue("Some unknown item", -1, RarityTier.COMMON, 0, false, 0, null,
+		overlay.enqueue("Some unknown item", -1, RarityTier.COMMON, 0, false, null,
 			null, null, null, null, List.of());
 
 		renderPastFold();

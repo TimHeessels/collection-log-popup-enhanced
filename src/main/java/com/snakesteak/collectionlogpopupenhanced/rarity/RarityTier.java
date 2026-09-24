@@ -2,9 +2,21 @@ package com.snakesteak.collectionlogpopupenhanced.rarity;
 
 public enum RarityTier
 {
-	COMMON,
-	UNCOMMON,
-	RARE,
-	VERY_RARE,
-	PET
+	COMMON("Common"),
+	UNCOMMON("Uncommon"),
+	RARE("Rare"),
+	VERY_RARE("Very Rare"),
+	PET("Pet");
+
+	private final String label;
+
+	RarityTier(String label)
+	{
+		this.label = label;
+	}
+
+	public String getLabel()
+	{
+		return label;
+	}
 }

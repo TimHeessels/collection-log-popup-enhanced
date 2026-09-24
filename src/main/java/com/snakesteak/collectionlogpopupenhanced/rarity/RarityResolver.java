@@ -191,16 +191,15 @@ public class RarityResolver
 		CompletionData data = completionData;
 		int price = getPrice(itemId);
 		boolean highAlch = isHighAlchPrice(itemId);
-		int alchPrice = itemId >= 0 ? itemManager.getItemComposition(itemId).getHaPrice() : 0;
 
 		if (data.petIdByName.containsKey(itemName))
 		{
-			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercent(data, itemId), null, 0, 100, 0, 0, 0, alchPrice);
+			return new RarityResult(RarityTier.PET, itemId, price, highAlch, compPercent(data, itemId), null, 0, 100, 0, 0, 0);
 		}
 
 		if (data.byId.isEmpty())
 		{
-			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, 0, 0, 0, 0, 0, alchPrice);
+			return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, 0, 0, 0, 0, 0);
 		}
 
 		Double compPercent = compPercent(data, itemId);
@@ -213,7 +212,7 @@ public class RarityResolver
 			// Returns before buildDataset(): absolute cutoffs need no distribution to rank against.
 			// A price of 0 lands in COMMON, so no drop-rate fallback is needed here. See AGENTS.md.
 			return new RarityResult(bucketByThreshold(price), itemId, price, highAlch, compPercent,
-				completionScore, valueScore, 0, 0, 0, 0, alchPrice);
+				completionScore, valueScore, 0, 0, 0, 0);
 		}
 
 		Dataset dataset = buildDataset(data);
@@ -227,7 +226,7 @@ public class RarityResolver
 				// No completion data for this item to rank rarity-only against - nothing to back a
 				// tier with.
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-					dataset.compositeScores.length, 0, 0, alchPrice);
+					dataset.compositeScores.length, 0, 0);
 			}
 			score = completionScore;
 			distribution = dataset.completionScores;
@@ -243,7 +242,7 @@ public class RarityResolver
 			// here and another way there.
 			RarityTier tier = bucketByThreshold(price);
 			return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, 0,
-				dataset.compositeScores.length, 0, 0, alchPrice);
+				dataset.compositeScores.length, 0, 0);
 		}
 		else
 		{
@@ -257,14 +256,14 @@ public class RarityResolver
 			else
 			{
 				return new RarityResult(RarityTier.COMMON, itemId, price, highAlch, null, null, valueScore, 0,
-					dataset.compositeScores.length, 0, 0, alchPrice);
+					dataset.compositeScores.length, 0, 0);
 			}
 		}
 
 		double percentile = percentileRank(distribution, score);
 		RarityTier tier = bucketByPercentile(percentile);
 		return new RarityResult(tier, itemId, price, highAlch, compPercent, completionScore, valueScore, percentile,
-			dataset.compositeScores.length, 0, 0, alchPrice);
+			dataset.compositeScores.length, 0, 0);
 	}
 
 	private static Double compPercent(CompletionData data, int itemId)

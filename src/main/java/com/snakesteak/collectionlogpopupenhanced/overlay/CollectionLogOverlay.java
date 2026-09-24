@@ -106,7 +106,7 @@ public class CollectionLogOverlay extends Overlay
 	// darkness range.
 	private static final float PROGRESS_BAR_TRACK_DARKNESS_SCALE = 0.5f;
 
-	private static final String CAPTION_TEXT = "Collection log slot";
+	private static final String CAPTION_TEXT = "Collection Log";
 	private static final int BASE_CAPTION_BASELINE_Y = 22;
 
 	// The colour picker offers an alpha slider, but the panel art rebuilds every pixel from the
@@ -138,6 +138,9 @@ public class CollectionLogOverlay extends Overlay
 	// original pixels rather than compounding successive recolours.
 	private final Map<RarityTier, BufferedImage> sourceBackgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> sourceIconFrames = new EnumMap<>(RarityTier.class);
+	// Drawn as-is, never recoloured - loaded up front so switching style needs no jar IO.
+	private final Map<RarityTier, BufferedImage> neutralBackgrounds = new EnumMap<>(RarityTier.class);
+	private final Map<RarityTier, BufferedImage> neutralIconFrames = new EnumMap<>(RarityTier.class);
 	// What actually gets drawn - the source art recoloured to the configured per-tier colours.
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
@@ -203,17 +206,8 @@ public class CollectionLogOverlay extends Overlay
 		// silently undone next frame - disable that instead of leaving it non-functional.
 		setMovable(false);
 
-		sourceBackgrounds.put(RarityTier.COMMON, loadImage("Backgrounds/BackgroundPanel1.png"));
-		sourceBackgrounds.put(RarityTier.UNCOMMON, loadImage("Backgrounds/BackgroundPanel2.png"));
-		sourceBackgrounds.put(RarityTier.RARE, loadImage("Backgrounds/BackgroundPanel3.png"));
-		sourceBackgrounds.put(RarityTier.VERY_RARE, loadImage("Backgrounds/BackgroundPanel4.png"));
-		sourceBackgrounds.put(RarityTier.PET, loadImage("Backgrounds/BackgroundPanelPet.png"));
-
-		sourceIconFrames.put(RarityTier.COMMON, loadImage("Icons/IconPanel1.png"));
-		sourceIconFrames.put(RarityTier.UNCOMMON, loadImage("Icons/IconPanel2.png"));
-		sourceIconFrames.put(RarityTier.RARE, loadImage("Icons/IconPanel3.png"));
-		sourceIconFrames.put(RarityTier.VERY_RARE, loadImage("Icons/IconPanel4.png"));
-		sourceIconFrames.put(RarityTier.PET, loadImage("Icons/IconPanelPet.png"));
+		loadArt(PanelStyle.COLORFUL, sourceBackgrounds, sourceIconFrames);
+		loadArt(PanelStyle.NEUTRAL, neutralBackgrounds, neutralIconFrames);
 
 		applyScale(config.overlayScalePercent());
 		applyColours(readColours());
@@ -269,13 +263,14 @@ public class CollectionLogOverlay extends Overlay
 	private int[] readColours()
 	{
 		RarityTier[] tiers = RarityTier.values();
-		int[] key = new int[tiers.length + 1];
+		int[] key = new int[tiers.length + 2];
 		for (int i = 0; i < tiers.length; i++)
 		{
 			key[i] = tierColor(tiers[i]).getRGB();
 		}
-		// Part of the cache key, not a colour: changing it re-derives every background.
+		// Part of the cache key, not colours: changing either re-derives every background.
 		key[tiers.length] = config.backgroundDarkness();
+		key[tiers.length + 1] = config.panelStyle().ordinal();
 		return key;
 	}
 
@@ -286,8 +281,18 @@ public class CollectionLogOverlay extends Overlay
 	private void applyColours(int[] colours)
 	{
 		int darkness = config.backgroundDarkness();
+		boolean neutral = config.panelStyle() == PanelStyle.NEUTRAL;
 		for (RarityTier tier : RarityTier.values())
 		{
+			if (neutral)
+			{
+				backgrounds.put(tier, neutralBackgrounds.get(tier));
+				iconFrames.put(tier, neutralIconFrames.get(tier));
+				progressBarTrackColors.put(tier,
+					PanelRecolorer.deriveBackground(Color.WHITE, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
+				continue;
+			}
+
 			Color border = tierColor(tier);
 			Color background = PanelRecolorer.deriveBackground(border, darkness);
 			backgrounds.put(tier, PanelRecolorer.recolor(sourceBackgrounds.get(tier), tier, border, background));
@@ -296,6 +301,21 @@ public class CollectionLogOverlay extends Overlay
 				PanelRecolorer.deriveBackground(border, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
 		}
 		lastColours = colours;
+	}
+
+	private static void loadArt(PanelStyle style, Map<RarityTier, BufferedImage> panels, Map<RarityTier, BufferedImage> frames)
+	{
+		panels.put(RarityTier.COMMON, loadImage(style.resource("Backgrounds/BackgroundPanel1.png")));
+		panels.put(RarityTier.UNCOMMON, loadImage(style.resource("Backgrounds/BackgroundPanel2.png")));
+		panels.put(RarityTier.RARE, loadImage(style.resource("Backgrounds/BackgroundPanel3.png")));
+		panels.put(RarityTier.VERY_RARE, loadImage(style.resource("Backgrounds/BackgroundPanel4.png")));
+		panels.put(RarityTier.PET, loadImage(style.resource("Backgrounds/BackgroundPanelPet.png")));
+
+		frames.put(RarityTier.COMMON, loadImage(style.resource("Icons/IconPanel1.png")));
+		frames.put(RarityTier.UNCOMMON, loadImage(style.resource("Icons/IconPanel2.png")));
+		frames.put(RarityTier.RARE, loadImage(style.resource("Icons/IconPanel3.png")));
+		frames.put(RarityTier.VERY_RARE, loadImage(style.resource("Icons/IconPanel4.png")));
+		frames.put(RarityTier.PET, loadImage(style.resource("Icons/IconPanelPet.png")));
 	}
 
 	private static BufferedImage loadImage(String resourceName)
@@ -310,19 +330,19 @@ public class CollectionLogOverlay extends Overlay
 		}
 	}
 
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
+	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch,
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
-		enqueue(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount, killCountKind,
+		enqueue(itemName, itemId, tier, price, highAlch, compPercent, killCount, killCountKind,
 			killCountSource, null, dropProbability, ambiguousDropRates);
 	}
 
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
+	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch,
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
-		enqueue(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount, killCountKind,
+		enqueue(itemName, itemId, tier, price, highAlch, compPercent, killCount, killCountKind,
 			killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, false);
 	}
 
@@ -330,7 +350,7 @@ public class CollectionLogOverlay extends Overlay
 	 * @param held holds the item back until {@link #releaseHeld()} instead of showing it in turn -
 	 *             see CollectionLogPopupEnhancedPlugin's CoX chest handling.
 	 */
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch, int alchPrice,
+	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch,
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates,
 		boolean held)
@@ -339,7 +359,7 @@ public class CollectionLogOverlay extends Overlay
 		// batch - the only one that plays a sound when bulkUnlockSfx is on. A held item can't claim
 		// this: it shows later, so #releaseHeld works it out again at the point it's let through.
 		boolean batchStart = !held && queue.isEmpty() && current == null;
-		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, alchPrice, compPercent, killCount,
+		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, compPercent, killCount,
 			killCountKind, killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, batchStart, held));
 	}
 
@@ -383,7 +403,12 @@ public class CollectionLogOverlay extends Overlay
 	public Dimension render(Graphics2D graphics)
 	{
 		long now = System.currentTimeMillis();
+		// Still advanced in Audio only: the queue is what plays and spaces out the sounds.
 		advance(now);
+		if (config.panelStyle() == PanelStyle.AUDIO_ONLY)
+		{
+			return null;
+		}
 
 		int scalePercent = config.overlayScalePercent();
 		if (scalePercent != lastScalePercent)
@@ -557,14 +582,18 @@ public class CollectionLogOverlay extends Overlay
 		// Drawn top-to-bottom to match the fold-open reveal (see #render), which clips progressively
 		// from the panel's top edge downward: caption, then name, then the bottom corner stats.
 		graphics.setFont(captionFont);
-		int captionX = (panelWidth - graphics.getFontMetrics().stringWidth(CAPTION_TEXT)) / 2;
-		drawOutlinedString(graphics, CAPTION_TEXT, captionX, captionBaselineY, opaque(config.colourCaption()));
+		// Neutral art carries no tier colour, so the caption names the tier instead.
+		String caption = config.panelStyle() == PanelStyle.NEUTRAL
+			? current.getTier().getLabel() + " " + CAPTION_TEXT
+			: CAPTION_TEXT;
+		int captionX = (panelWidth - graphics.getFontMetrics().stringWidth(caption)) / 2;
+		drawOutlinedString(graphics, caption, captionX, captionBaselineY, opaque(config.colourCaption()));
 
 		int maxNameWidth = panelWidth - 2 * nameSideMargin;
 		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth, nameFontMinSize);
 		graphics.setFont(fittedName.getFont());
 		int nameX = (panelWidth - graphics.getFontMetrics().stringWidth(fittedName.getText())) / 2;
-		drawOutlinedString(graphics, fittedName.getText(), nameX, nameBaselineY, tierColor(current.getTier()));
+		drawOutlinedString(graphics, fittedName.getText(), nameX, nameBaselineY, accentColor(current.getTier()));
 
 		drawProgressBar(graphics);
 
@@ -626,7 +655,7 @@ public class CollectionLogOverlay extends Overlay
 			return;
 		}
 
-		graphics.setColor(tierColor(current.getTier()));
+		graphics.setColor(accentColor(current.getTier()));
 		graphics.fillRect(progressBarX, progressBarTopY, filledWidth, progressBarHeight);
 	}
 
@@ -836,17 +865,14 @@ public class CollectionLogOverlay extends Overlay
 		switch (stat)
 		{
 			case VALUE:
-				boolean showAlch = config.valueDisplayMode() == ValueDisplayMode.HIGH_ALCH;
-				int displayPrice = showAlch ? item.getAlchPrice() : item.getPrice();
-				boolean displayHighAlch = showAlch || item.isHighAlch();
-				String valueText = formatValue(displayPrice) + " gp" + (displayHighAlch ? " (HA)" : "");
+				String valueText = formatValue(item.getPrice()) + " gp" + (item.isHighAlch() ? " (HA)" : "");
 				return new Stat("Value: ", List.of(valueText), opaque(config.colourStatValue()));
 			case RARITY:
 				if (item.getCompPercent() == null)
 				{
 					return null;
 				}
-				return new Stat("Wiki Comp%: ", List.of(String.format("%.1f%%", item.getCompPercent())), tierColor(item.getTier()));
+				return new Stat("Obtained by: ", List.of(String.format("%.1f%%", item.getCompPercent())), opaque(config.colourStatValue()));
 			case KILL_COUNT:
 				if (item.getKillCount() == null)
 				{
@@ -962,8 +988,16 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * The configured colour for {@code tier}, used for both the panel art and the item name/Wiki Comp%
-	 * text so they always read as the same tier.
+	 * The item name and progress fill colour: the tier colour, or plain white on the neutral style.
+	 */
+	private Color accentColor(RarityTier tier)
+	{
+		return config.panelStyle() == PanelStyle.NEUTRAL ? Color.WHITE : tierColor(tier);
+	}
+
+	/**
+	 * The configured colour for {@code tier}: the colourful panel art, and via #accentColor the name
+	 * and progress fill, so they always read as the same tier.
 	 */
 	private Color tierColor(RarityTier tier)
 	{
@@ -1003,7 +1037,6 @@ public class CollectionLogOverlay extends Overlay
 		private final RarityTier tier;
 		private final int price;
 		private final boolean highAlch;
-		private final int alchPrice;
 		private final Double compPercent;
 		private final Integer killCount;
 		private final KillCountKind killCountKind;

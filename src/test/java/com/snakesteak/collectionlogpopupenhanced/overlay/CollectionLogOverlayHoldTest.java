@@ -16,6 +16,7 @@ import org.junit.Test;
 import org.mockito.InOrder;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -35,6 +36,7 @@ public class CollectionLogOverlayHoldTest
 	// to 0 below, so this is the whole lifetime of an item on screen.
 	private static final long TOTAL_ANIMATION_MILLIS = 550 + 400 + 400 + 150;
 
+	private CollectionLogPopupEnhancedConfig config;
 	private SoundManager soundManager;
 	private CollectionLogOverlay overlay;
 
@@ -43,7 +45,7 @@ public class CollectionLogOverlayHoldTest
 	{
 		Client client = mock(Client.class);
 		ItemManager itemManager = mock(ItemManager.class);
-		CollectionLogPopupEnhancedConfig config = mock(CollectionLogPopupEnhancedConfig.class);
+		config = mock(CollectionLogPopupEnhancedConfig.class);
 		soundManager = mock(SoundManager.class);
 
 		// Unstubbed these return 0, sending render() down its degenerate-viewport fallback.
@@ -54,9 +56,9 @@ public class CollectionLogOverlayHoldTest
 		when(config.overlayScalePercent()).thenReturn(100);
 		when(config.overlayDisplaySeconds()).thenReturn(0);
 		when(config.backgroundDarkness()).thenReturn(50);
+		when(config.panelStyle()).thenReturn(PanelStyle.COLORFUL);
 		when(config.previewTier()).thenReturn(PreviewTier.NONE);
 		when(config.textRenderMode()).thenReturn(TextRenderMode.SMOOTH);
-		when(config.valueDisplayMode()).thenReturn(ValueDisplayMode.GE_VALUE);
 		when(config.leftPanelStat()).thenReturn(LeftPanelStat.KILL_COUNT);
 		when(config.rightPanelStat()).thenReturn(RightPanelStat.DROP_RATE);
 		when(config.showProgressBar()).thenReturn(true);
@@ -75,7 +77,7 @@ public class CollectionLogOverlayHoldTest
 
 	private void enqueue(String name, RarityTier tier, boolean held)
 	{
-		overlay.enqueue(name, 1, tier, 0, false, 0, null, null, null, null, null, null, List.of(), held);
+		overlay.enqueue(name, 1, tier, 0, false, null, null, null, null, null, null, List.of(), held);
 	}
 
 	/** One frame is enough to dequeue the next item - the clock only matters for expiry. */
@@ -104,6 +106,25 @@ public class CollectionLogOverlayHoldTest
 
 		overlay.releaseHeld();
 		renderFrame();
+		verify(soundManager).play(RarityTier.VERY_RARE);
+	}
+
+	@Test
+	public void audioOnlyPlaysSoundWithoutDrawing()
+	{
+		when(config.panelStyle()).thenReturn(PanelStyle.AUDIO_ONLY);
+		enqueue("Twisted bow", RarityTier.VERY_RARE, false);
+
+		BufferedImage canvas = new BufferedImage(800, 600, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D graphics = canvas.createGraphics();
+		try
+		{
+			assertNull(overlay.render(graphics));
+		}
+		finally
+		{
+			graphics.dispose();
+		}
 		verify(soundManager).play(RarityTier.VERY_RARE);
 	}
 

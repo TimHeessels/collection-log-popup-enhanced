@@ -1,9 +1,9 @@
 package com.snakesteak.collectionlogpopupenhanced;
 
 import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
+import com.snakesteak.collectionlogpopupenhanced.overlay.PanelStyle;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.TextRenderMode;
-import com.snakesteak.collectionlogpopupenhanced.overlay.ValueDisplayMode;
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityBasis;
 import java.awt.Color;
@@ -24,44 +24,58 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	String previewSection = "previewSection";
 
 	@ConfigSection(
+		name = "Style",
+		description = "Colourful, neutral (OSRS-style) or sound only",
+		position = 1
+	)
+	String styleSection = "styleSection";
+
+	@ConfigSection(
 		name = "Rarity",
 		description = "How an item's rarity tier is determined",
-		position = 1
+		position = 6
 	)
 	String raritySection = "raritySection";
 
 	@ConfigSection(
 		name = "Statistics",
 		description = "Statistics in bottom left and right of popup",
-		position = 2
+		position = 7
 	)
 	String overlaySection = "overlaySection";
 
 	@ConfigSection(
 		name = "Audio",
 		description = "Sound effects played on new collection log unlocks",
-		position = 3
+		position = 2
 	)
 	String audioSection = "audioSection";
 
 	@ConfigSection(
 		name = "Appearance",
 		description = "Tune to your liking",
-		position = 4
+		position = 3
 	)
 	String appearanceSection = "appearanceSection";
 
 	@ConfigSection(
-		name = "Colours",
-		description = "Border and background colour of the popup, per rarity tier",
-		position = 5
+		name = "Panel colours (Colourful)",
+		description = "Border and background colours",
+		position = 4
 	)
 	String coloursSection = "coloursSection";
 
 	@ConfigSection(
+		name = "Text colours",
+		description = "Colour of the caption and statistic text",
+		position = 5
+	)
+	String textColoursSection = "textColoursSection";
+
+	@ConfigSection(
 		name = "Miscellaneous",
 		description = "Small tweaks",
-		position = 6
+		position = 8
 	)
 	String tweaksSection = "tweaksSection";
 
@@ -138,22 +152,10 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "valueDisplayMode",
-		name = "Value shown as",
-		description = "Prefer to display value statistic as high alch or G.E.",
-		position = 1,
-		section = overlaySection
-	)
-	default ValueDisplayMode valueDisplayMode()
-	{
-		return ValueDisplayMode.GE_VALUE;
-	}
-
-	@ConfigItem(
 		keyName = "rightPanelStat",
 		name = "Right statistic",
 		description = "Which statistic to show on the right side of the panel",
-		position = 2,
+		position = 1,
 		section = overlaySection
 	)
 	default RightPanelStat rightPanelStat()
@@ -348,6 +350,18 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "panelStyle",
+		name = "Panel style",
+		description = "Colourful tints the panel with the tier colour, neutral keeps the plain OSRS-style art, audio only keeps the game's own popup and just plays the sound",
+		position = 0,
+		section = styleSection
+	)
+	default PanelStyle panelStyle()
+	{
+		return PanelStyle.COLORFUL;
+	}
+
+	@ConfigItem(
 		keyName = "colourCommonTier",
 		name = "Common",
 		description = "Panel colour for common tier",
@@ -423,9 +437,9 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "colourCaption",
 		name = "Caption text",
-		description = "Colour of the collection log slot caption",
-		position = 6,
-		section = coloursSection
+		description = "Colour of the Collection Log caption at the top",
+		position = 0,
+		section = textColoursSection
 	)
 	default Color colourCaption()
 	{
@@ -436,8 +450,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourStatLabel",
 		name = "Statistic labels",
 		description = "Colour of the bottom-corner statistic labels",
-		position = 7,
-		section = coloursSection
+		position = 1,
+		section = textColoursSection
 	)
 	default Color colourStatLabel()
 	{
@@ -448,8 +462,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		keyName = "colourStatValue",
 		name = "Statistic values",
 		description = "Colour of the bottom-corner statistic values",
-		position = 8,
-		section = coloursSection
+		position = 2,
+		section = textColoursSection
 	)
 	default Color colourStatValue()
 	{

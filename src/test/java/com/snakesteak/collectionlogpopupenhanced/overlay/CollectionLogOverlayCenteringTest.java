@@ -36,6 +36,7 @@ public class CollectionLogOverlayCenteringTest
 
 		when(config.overlayScalePercent()).thenReturn(100);
 		when(config.backgroundDarkness()).thenReturn(50);
+		when(config.panelStyle()).thenReturn(PanelStyle.COLORFUL);
 		when(config.previewTier()).thenReturn(PreviewTier.NONE);
 		when(config.textRenderMode()).thenReturn(TextRenderMode.SMOOTH);
 		when(config.colourCommonTier()).thenReturn(Color.WHITE);

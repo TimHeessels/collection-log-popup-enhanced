@@ -330,7 +330,7 @@ public class CollectionLogOverlay extends Overlay
 		}
 	}
 
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch,
+	public void enqueue(String itemName, int itemId, RarityTier tier, long price, boolean highAlch,
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
@@ -338,7 +338,7 @@ public class CollectionLogOverlay extends Overlay
 			killCountSource, null, dropProbability, ambiguousDropRates);
 	}
 
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch,
+	public void enqueue(String itemName, int itemId, RarityTier tier, long price, boolean highAlch,
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates)
 	{
@@ -350,7 +350,7 @@ public class CollectionLogOverlay extends Overlay
 	 * @param held holds the item back until {@link #releaseHeld()} instead of showing it in turn -
 	 *             see CollectionLogPopupEnhancedPlugin's CoX chest handling.
 	 */
-	public void enqueue(String itemName, int itemId, RarityTier tier, int price, boolean highAlch,
+	public void enqueue(String itemName, int itemId, RarityTier tier, long price, boolean highAlch,
 		Double compPercent, Integer killCount, KillCountKind killCountKind, String killCountSource,
 		Integer secondaryKillCount, Double dropProbability, List<DropRateResolver.SourceRate> ambiguousDropRates,
 		boolean held)
@@ -965,9 +965,9 @@ public class CollectionLogOverlay extends Overlay
 
 	// Long gp values (e.g. "2,147,483,647 gp") don't fit the panel either, so truncate to one decimal
 	// of K/M/B once the value hits 100k+ - below that the plain number is short enough to fit as-is.
-	private static String formatValue(int value)
+	private static String formatValue(long value)
 	{
-		long absValue = Math.abs((long) value);
+		long absValue = Math.abs(value);
 		String sign = value < 0 ? "-" : "";
 		if (absValue < 100_000)
 		{
@@ -1035,7 +1035,7 @@ public class CollectionLogOverlay extends Overlay
 		private final String itemName;
 		private final int itemId;
 		private final RarityTier tier;
-		private final int price;
+		private final long price;
 		private final boolean highAlch;
 		private final Double compPercent;
 		private final Integer killCount;

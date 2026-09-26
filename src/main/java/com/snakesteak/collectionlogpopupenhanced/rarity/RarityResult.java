@@ -11,7 +11,7 @@ public class RarityResult
 {
 	RarityTier tier;
 	int itemId;
-	int price;
+	long price;
 	boolean highAlch;
 	Double compPercent;
 	Double completionScore;

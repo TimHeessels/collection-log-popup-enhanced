@@ -29,6 +29,7 @@ import static org.mockito.Mockito.when;
  * The fixture is gitignored (see src/test/resources/local-only/README.md) - these tests are
  * skipped rather than failed if it isn't present locally.
  */
+// TODO(RuneLite 1.13): getItemPrice returns long from 1.13 - make every getItemPrice stub below return a long.
 public class RarityResolverTest
 {
 	private static final String FIXTURE = "/local-only/collection-log.json";
@@ -316,14 +317,7 @@ public class RarityResolverTest
 		assertEquals(false, result.isHighAlch());
 	}
 
-	// Regression test for the actual reported bug: ItemManager.getItemPrice() sums mapped/bundled item
-	// prices with plain int arithmetic and can overflow to a negative number for at least one item.
-	// Math.log(negative) is NaN, which used to poison the shared logPriceMin/logPriceMax (Math.min/max
-	// propagate NaN forever once it appears) - after that, EVERY item's value score came out NaN, and
-	// Arrays.binarySearch treats NaN as "greater than everything", so every single item rated as the
-	// 100th percentile regardless of its actual comp% or price. Dataset id 2583 is an arbitrary stand-in
-	// for "the one poisoned entry" here; id 11849 (comp 96.8%, the dataset's least-rare item) is the
-	// control - it must still come back COMMON even with a NaN-inducing price elsewhere in the dataset.
+	// Reported bug: a negative (int-overflowed) price on one item made every item rate 100th percentile.
 	@Test
 	public void negativePriceOnOneDatasetItemDoesNotPoisonEveryoneElsesPercentile()
 	{
@@ -333,9 +327,7 @@ public class RarityResolverTest
 		assertEquals(RarityTier.COMMON, result.getTier());
 	}
 
-	// Same failure mode, but from the other side of the overflow: a price at/near Integer.MAX_VALUE
-	// wraps back to negative when "+1" is done in int arithmetic (2147483647 + 1 == Integer.MIN_VALUE),
-	// which still feeds Math.log() a negative number -> NaN -> same dataset-wide poisoning as above.
+	// Same failure from the other side: Integer.MAX_VALUE + 1 wraps negative in int arithmetic.
 	@Test
 	public void maxIntPriceOnOneDatasetItemDoesNotPoisonEveryoneElsesPercentile()
 	{
@@ -345,9 +337,7 @@ public class RarityResolverTest
 		assertEquals(RarityTier.COMMON, result.getTier());
 	}
 
-	// Reported live: an item with NO completion data at all (compPercent null) still came back
-	// VERY_RARE with logPriceMin/logPriceMax both NaN - proving the poisoning happens in buildDataset()
-	// itself (shared across every resolve() call), not just in the compPercent-known branch.
+	// Reported live: the poisoning also hit items with no completion data.
 	@Test
 	public void unknownItemStillResolvesSanelyWhenSomeDatasetPriceOverflows()
 	{

@@ -189,7 +189,7 @@ public class RarityResolver
 	public RarityResult resolve(int itemId, String itemName)
 	{
 		CompletionData data = completionData;
-		int price = getPrice(itemId);
+		long price = getPrice(itemId);
 		boolean highAlch = isHighAlchPrice(itemId);
 
 		if (data.petIdByName.containsKey(itemName))
@@ -280,13 +280,13 @@ public class RarityResolver
 	 * GE price where available; falls back to high alch value for items with no GE price, since an
 	 * alch value is still a better rarity signal than 0.
 	 */
-	private int getPrice(int itemId)
+	private long getPrice(int itemId)
 	{
 		if (itemId < 0)
 		{
 			return 0;
 		}
-		int gePrice = itemManager.getItemPrice(itemId);
+		long gePrice = itemManager.getItemPrice(itemId);
 		if (gePrice > 0)
 		{
 			return gePrice;
@@ -323,7 +323,7 @@ public class RarityResolver
 		return valueScoreForPrice(getPrice(itemId));
 	}
 
-	private double valueScoreForPrice(int price)
+	private double valueScoreForPrice(long price)
 	{
 		switch (bucketByThreshold(price))
 		{
@@ -339,7 +339,7 @@ public class RarityResolver
 	}
 
 	// Reads config on every call, so an edited threshold takes effect on the next unlock.
-	private RarityTier bucketByThreshold(int price)
+	private RarityTier bucketByThreshold(long price)
 	{
 		int[] thresholds = thresholds();
 		if (price >= thresholds[2])

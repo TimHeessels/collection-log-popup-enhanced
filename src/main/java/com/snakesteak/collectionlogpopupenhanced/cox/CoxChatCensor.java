@@ -21,7 +21,7 @@ import net.runelite.client.util.Text;
  * the string the script is about to draw. The stored messages are never touched, so revealing is
  * just forgetting what was tracked and rebuilding the chatbox - nothing can be left censored by a
  * missed restore, and other plugins reading ChatMessage still see the real text.
- * <p>No in-raid check is needed: every item in CoxLootParser.UNIQUES only comes from the CoX chest.
+ * <p>Only the raid party's own broadcast starts tracking, which is what scopes censoring to the player's raid.
  */
 @Slf4j
 @Singleton
@@ -54,15 +54,11 @@ public class CoxChatCensor
 		}
 
 		String message = chatMessage.getMessage();
+		// Clan broadcasts never start tracking - they also arrive for raids the player wasn't in.
 		switch (chatMessage.getType())
 		{
 			case FRIENDSCHATNOTIFICATION:
 				CoxLootParser.parsePartyLoot(message).ifPresent(loot -> trackBroadcast(loot, mode));
-				break;
-			case CLAN_MESSAGE:
-			case CLAN_GUEST_MESSAGE:
-			case CLAN_GIM_MESSAGE:
-				CoxLootParser.parseClanBroadcast(message).ifPresent(loot -> trackBroadcast(loot, mode));
 				break;
 			case GAMEMESSAGE:
 				if (CoxLootParser.isOwnLootGameMessage(message))

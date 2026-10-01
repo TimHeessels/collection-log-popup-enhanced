@@ -1,5 +1,6 @@
 package com.snakesteak.collectionlogpopupenhanced;
 
+import com.snakesteak.collectionlogpopupenhanced.cox.CoxChatCensorMode;
 import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.PanelStyle;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
@@ -471,16 +472,27 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
-    keyName = "delayCoxPopupUntilChest",
-    name = "Delay CoX popups until chest",
-    description = "Use in combination with a CoX censor plugin.",
-    warning = "Please note that using this might break automatic collection log screenshotting for clogs from the CoX chest.",
-    position = 0,
-    section = tweaksSection
-)
+		keyName = "delayCoxPopupUntilChest",
+		name = "Delay CoX popups until chest",
+		description = "Hide the collection log popup for CoX purples until the reward chest, storage or bank is opened. The collection log screenshot is taken then too.",
+		position = 0,
+		section = tweaksSection
+	)
 	default boolean delayCoxPopupUntilChest()
 	{
 		return false;
 	}
-	
+
+	@ConfigItem(
+		keyName = "coxChatCensor",
+		name = "Censor CoX loot in chat",
+		description = "Replace CoX purples in chat with ??? until the reward chest, storage or bank is opened",
+		position = 1,
+		section = tweaksSection
+	)
+	default CoxChatCensorMode coxChatCensor()
+	{
+		return CoxChatCensorMode.OFF;
+	}
+
 }

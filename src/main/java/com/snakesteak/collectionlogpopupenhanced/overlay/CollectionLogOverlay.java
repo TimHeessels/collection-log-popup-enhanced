@@ -32,6 +32,7 @@ import java.util.DoubleSummaryStatistics;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -153,6 +154,11 @@ public class CollectionLogOverlay extends Overlay
 
 	private PendingItem current;
 	private long notificationStartMillis;
+
+	// Told the item name once a popup released by #releaseHeld has finished opening - the plugin
+	// takes the delayed CoX collection log screenshot from it.
+	@Setter
+	private Consumer<String> releasedFullyOpenListener;
 
 	// Scaled layout/font state, recomputed by #applyScale only when config.overlayScalePercent()
 	// changes (rather than every frame) since Font#deriveFont isn't free to call 50x/sec for nothing.
@@ -360,7 +366,7 @@ public class CollectionLogOverlay extends Overlay
 		// this: it shows later, so #releaseHeld works it out again at the point it's let through.
 		boolean batchStart = !held && queue.isEmpty() && current == null;
 		queue.addLast(new PendingItem(itemName, itemId, tier, price, highAlch, compPercent, killCount,
-			killCountKind, killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, batchStart, held));
+			killCountKind, killCountSource, secondaryKillCount, dropProbability, ambiguousDropRates, batchStart, held, false));
 	}
 
 	public void clear()
@@ -384,6 +390,7 @@ public class CollectionLogOverlay extends Overlay
 				continue;
 			}
 			item.setHeld(false);
+			item.setReleased(true);
 			item.setBatchStart(batchStart);
 			batchStart = false;
 		}
@@ -747,6 +754,16 @@ public class CollectionLogOverlay extends Overlay
 			return;
 		}
 
+		// Fully open: the fold has finished and the icon has popped in.
+		if (current.isReleased() && now - notificationStartMillis >= FOLD_MILLIS + ICON_POP_MILLIS)
+		{
+			current.setReleased(false);
+			if (releasedFullyOpenListener != null)
+			{
+				releasedFullyOpenListener.accept(current.getItemName());
+			}
+		}
+
 		if (config.previewTier() != PreviewTier.NONE)
 		{
 			// Held indefinitely - see the fadeAlpha branch in #render.
@@ -1026,8 +1043,8 @@ public class CollectionLogOverlay extends Overlay
 		return color.getAlpha() == 0xFF ? color : new Color(color.getRGB() & RGB_MASK);
 	}
 
-	// Not @Value like the others here: #releaseHeld rewrites batchStart and held after construction,
-	// so only those two carry a setter and the rest stay read-only.
+	// Not @Value like the others here: #releaseHeld rewrites batchStart, held and released after
+	// construction, so only those carry a setter and the rest stay read-only.
 	@Getter
 	@AllArgsConstructor
 	private static class PendingItem
@@ -1050,6 +1067,9 @@ public class CollectionLogOverlay extends Overlay
 		private boolean batchStart;
 		@Setter
 		private boolean held;
+		// Let through by #releaseHeld and not yet reported to releasedFullyOpenListener.
+		@Setter
+		private boolean released;
 	}
 
 	@Value

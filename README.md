@@ -113,10 +113,9 @@ And it will use your sound instead! (See 'Testing' on how to test if your audio 
 (Note: if it doesn't play a sound and the spelling is correct, your audio file is not supported, try another.)
 
 # Chambers of Xerics - Delay
-Toggle this setting in Config to show the popup upon opening the chest (Or the Storage unit outside) instead of the moment of completing a raid. Use in conjucture with [CoX special loot hider](https://runelite.net/plugin-hub/show/cox-special-loot-hider)
+Inspired by CoX sensor, you can toggle these settings to wait for opening the chest before revealing what item you got. It also waits with taking a screenshot until you opened the chest.
 
-> [!CAUTION]
-> Using this setting + the loot-hider-plugin, might break the automatically screenshotting of collection logs from Chambers of Xerics.
+If you use [CoX special loot hider](https://runelite.net/plugin-hub/show/cox-special-loot-hider) with these settings on, turn it off.
 
 ![alt text](CoX-Delay.png)
 
@@ -128,6 +127,7 @@ In 'Audio only' mode the native popup is left untouched, so screenshots capture 
 # Thanks to:
 C engineer plugin for collection log slot popup tie ins.
 Trailblazer audio effect for references to scripts on playing audio
+CoX special loot hider (Karambtwo, Rikten X, Fraac) for the CoX chat censoring and delayed screenshot approach
 
 ## Code inspirations
 The popup backgrounds are from:

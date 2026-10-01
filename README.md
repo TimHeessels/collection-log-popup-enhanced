@@ -113,11 +113,15 @@ And it will use your sound instead! (See 'Testing' on how to test if your audio 
 (Note: if it doesn't play a sound and the spelling is correct, your audio file is not supported, try another.)
 
 # Chambers of Xerics - Delay
-Inspired by CoX sensor, you can toggle these settings to wait for opening the chest before revealing what item you got. It also waits with taking a screenshot until you opened the chest.
+Inspired by CoX sensor plugin, you can toggle these settings to wait for opening the chest before:
+* Showing the enhanced popup
+* Censor any loot in chat with ???
 
-If you use [CoX special loot hider](https://runelite.net/plugin-hub/show/cox-special-loot-hider) with these settings on, turn it off.
+It also waits with taking a screenshot until you opened the chest.
 
-![alt text](CoX-Delay.png)
+Do not use the [CoX Censor plugin](https://runelite.net/plugin-hub/show/cox-special-loot-hider) with these settings on.
+
+![alt text](CoX-Sensor.png)
 
 # Native popups and screenshots
 The native popup (the default one in the official client) has to be active in runescape settings, as the build in screenshot tool (taking a screenshot upon getting a new collection log) actually waits for the panel to be fully open, but only when this toggle is active. 

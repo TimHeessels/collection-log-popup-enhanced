@@ -74,8 +74,8 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	String textColoursSection = "textColoursSection";
 
 	@ConfigSection(
-		name = "Miscellaneous",
-		description = "Small tweaks",
+		name = "Chambers of Xeric censor",
+		description = "Hiding CoX purples until chest opened.",
 		position = 8
 	)
 	String tweaksSection = "tweaksSection";
@@ -485,7 +485,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigItem(
 		keyName = "coxChatCensor",
-		name = "Censor CoX loot in chat",
+		name = "Chatbox censor",
 		description = "Replace CoX purples in chat with ??? until the reward chest, storage or bank is opened",
 		position = 1,
 		section = tweaksSection

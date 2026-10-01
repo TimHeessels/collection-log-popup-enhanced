@@ -16,6 +16,7 @@ import com.snakesteak.collectionlogpopupenhanced.rarity.LocalRarityDatasetLoader
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
+import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -32,6 +33,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ScriptPostFired;
 import net.runelite.api.events.ScriptPreFired;
+import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarClientID;
@@ -81,8 +83,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 	private static final String COX_CENSOR_PLUGIN_CLASS = "com.coxspecialloothider.CoxSpecialLootHiderPlugin";
 	private static final String COX_CENSOR_CONFLICT_WARNING = "<col=ff0000>Collection Log Popup Enhanced: please turn off"
-		+ " the CoX Censor plugin - this plugin's CoX settings replace it, and using both shows the popup and takes"
-		+ " the screenshot twice.</col>";
+		+ " the CoX Censor plugin, this plugin already does the same thing.";
+	private static final String COX_CHAT_CENSOR_HINT = " To hide CoX loot in chat as well, turn on 'Chatbox censor'"
+		+ " under 'Chambers of Xeric censor' in this plugin's settings.";
 
 	// Opening any of these reveals the raid's loot, so a held popup is no longer a spoiler. Private
 	// storage and the bank cover leaving the raid without looting the chest.
@@ -155,6 +158,11 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 	// The real notification title while it is swapped for SPOOFED_NOTIFICATION_TITLE, else null.
 	private String spoofedNotificationTitle;
+
+	private boolean coxCensorConflictWarned;
+
+	// Tracked rather than read from the event, which has no previous value - so the warning fires on entry only.
+	private boolean inCoxRaid;
 
 	@Override
 	protected void startUp() throws Exception
@@ -241,7 +249,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (isCoxSettingTurnedOn(configChanged) && isCoxCensorEnabled())
 		{
 			clientThread.invoke(() -> client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				COX_CENSOR_CONFLICT_WARNING, null));
+				coxCensorConflictWarning(), null));
 		}
 	}
 
@@ -310,6 +318,53 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			restoreNotificationTitle();
 			coxChatCensor.reveal();
 		}
+
+		// LOGGED_IN refires after every region load and hop, so the flag keeps it to once per login.
+		if (state == GameState.LOGIN_SCREEN)
+		{
+			coxCensorConflictWarned = false;
+			inCoxRaid = false;
+		}
+		else if (state == GameState.LOGGED_IN && !coxCensorConflictWarned)
+		{
+			coxCensorConflictWarned = true;
+			warnIfCoxCensorConflicts();
+		}
+	}
+
+	@Subscribe
+	public void onVarbitChanged(VarbitChanged varbitChanged)
+	{
+		if (varbitChanged.getVarbitId() != VarbitID.RAIDS_CLIENT_INDUNGEON)
+		{
+			return;
+		}
+
+		boolean nowInRaid = varbitChanged.getValue() == 1;
+		if (nowInRaid && !inCoxRaid)
+		{
+			warnIfCoxCensorConflicts();
+		}
+		inCoxRaid = nowInRaid;
+	}
+
+	private void warnIfCoxCensorConflicts()
+	{
+		if (isAnyCoxSettingOn() && isCoxCensorEnabled())
+		{
+			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", coxCensorConflictWarning(), null);
+		}
+	}
+
+	private String coxCensorConflictWarning()
+	{
+		boolean chatCensorOff = config.coxChatCensor() == CoxChatCensorMode.OFF;
+		return COX_CENSOR_CONFLICT_WARNING + (chatCensorOff ? COX_CHAT_CENSOR_HINT : "") + "</col>";
+	}
+
+	private boolean isAnyCoxSettingOn()
+	{
+		return config.delayCoxPopupUntilChest() || config.coxChatCensor() != CoxChatCensorMode.OFF;
 	}
 
 	/**
@@ -404,7 +459,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			if (previewTier == PreviewTier.RANDOM)
 			{
-				testRandomDatasetItems(1);
+				testRandomDatasetItems(1, false);
 			}
 			else
 			{
@@ -449,7 +504,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (matcher.matches())
 		{
 			String itemName = Text.removeTags(matcher.group(1));
-			handleNewCollectionLogItem(null, itemName);
+			handleNewCollectionLogItem(null, itemName, true);
 		}
 	}
 
@@ -474,7 +529,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		String[] args = commandExecuted.getArguments();
 		if (args.length == 0)
 		{
-			testRandomDatasetItems(1);
+			testRandomDatasetItems(1, true);
 			return;
 		}
 
@@ -488,7 +543,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 					log.debug("Count must be positive.");
 					return;
 				}
-				testRandomDatasetItems(count);
+				testRandomDatasetItems(count, true);
 				return;
 			}
 			catch (NumberFormatException e)
@@ -501,7 +556,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		// like "Saradomin page 1", and a trailing number was once read as a kill count override,
 		// which silently truncated them to an item that doesn't exist.
 		String itemName = String.join(" ", args);
-		handleNewCollectionLogItem(null, itemName);
+		handleNewCollectionLogItem(null, itemName, true);
 	}
 
 	/**
@@ -511,16 +566,22 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	 */
 	private void simulateCoxLoot(String arguments)
 	{
-		String item = CoxLootParser.findUnique(arguments);
+		String lowered = arguments.toLowerCase();
+		String item = CoxLootParser.UNIQUES.stream()
+			.filter(unique -> lowered.startsWith(unique.toLowerCase()))
+			.max(Comparator.comparingInt(String::length))
+			.orElse(null);
 		if (item == null)
 		{
+			// <lt>/<gt> because a bare <...> is parsed as a chat tag and vanishes.
 			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"Usage: ::coxsim <CoX unique> [player], e.g. ::coxsim Twisted bow", null);
+				"Usage: ::coxsim <lt>CoX unique<gt> [player], e.g. ::coxsim Twisted bow. Uniques: "
+					+ String.join(", ", CoxLootParser.UNIQUES), null);
 			return;
 		}
 
 		String localName = client.getLocalPlayer() != null ? Text.removeTags(client.getLocalPlayer().getName()) : "You";
-		String otherName = arguments.substring(arguments.indexOf(item) + item.length()).trim();
+		String otherName = arguments.substring(item.length()).trim();
 		String player = otherName.isEmpty() ? localName : otherName;
 
 		client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION, "",
@@ -536,7 +597,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		}
 	}
 
-	private void testRandomDatasetItems(int count)
+	private void testRandomDatasetItems(int count, boolean holdCox)
 	{
 		List<Integer> itemIds = rarityResolver.randomItemIds(count);
 		if (itemIds.isEmpty())
@@ -553,7 +614,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		{
 			int canonicalId = itemManager.canonicalize(itemId);
 			String itemName = itemManager.getItemComposition(canonicalId).getName();
-			handleNewCollectionLogItem(canonicalId, itemName);
+			handleNewCollectionLogItem(canonicalId, itemName, holdCox);
 		}
 	}
 
@@ -568,22 +629,23 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 
 		int canonicalId = itemManager.canonicalize(itemId);
 		String itemName = itemManager.getItemComposition(canonicalId).getName();
-		handleNewCollectionLogItem(canonicalId, itemName);
+		// Preview never holds - the delay is about real loot, and a held preview would sit blank.
+		handleNewCollectionLogItem(canonicalId, itemName, false);
 	}
 
-	private void handleNewCollectionLogItem(Integer knownItemId, String itemName)
+	private void handleNewCollectionLogItem(Integer knownItemId, String itemName, boolean holdCox)
 	{
 		if (knownItemId != null)
 		{
-			handleResolvedItem(knownItemId, itemName, "known");
+			handleResolvedItem(knownItemId, itemName, "known", holdCox);
 			return;
 		}
 
 		// Resolution is asynchronous - see ItemIdResolver.resolveIdByName javadoc.
-		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString()));
+		itemIdResolver.resolveIdByName(itemName, (itemId, source) -> handleResolvedItem(itemId, itemName, source.toString(), holdCox));
 	}
 
-	private void handleResolvedItem(int itemId, String itemName, String resolvedVia)
+	private void handleResolvedItem(int itemId, String itemName, String resolvedVia, boolean holdCox)
 	{
 		RarityResult result = rarityResolver.resolve(itemId, itemName);
 
@@ -621,7 +683,7 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		log.debug("New collection log item '{}' (id {}, resolved via {}) resolved to {} (kill count {} {}, drop probability {}, ambiguous rates {})",
 			itemName, itemId, resolvedVia, result, killCount, killCountKind, dropProbability, ambiguousDropRates);
 
-		boolean held = config.delayCoxPopupUntilChest() && CoxLootParser.isUnique(itemName);
+		boolean held = holdCox && config.delayCoxPopupUntilChest() && CoxLootParser.isUnique(itemName);
 
 		collectionLogOverlay.enqueue(itemName, result.getItemId(), result.getTier(), result.getPrice(), result.isHighAlch(),
 			result.getCompPercent(), killCount, killCountKind, source,

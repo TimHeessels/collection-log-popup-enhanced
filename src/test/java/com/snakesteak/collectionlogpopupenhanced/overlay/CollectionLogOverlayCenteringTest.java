@@ -10,10 +10,12 @@ import java.awt.Point;
 import java.awt.image.BufferedImage;
 import net.runelite.api.Client;
 import net.runelite.client.game.ItemManager;
+import net.runelite.client.ui.overlay.OverlayPosition;
 import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -114,5 +116,51 @@ public class CollectionLogOverlayCenteringTest
 	{
 		stubViewport(1280, 0, 1280);
 		assertEquals(2, renderAndReadLocation().y);
+	}
+
+	/** A dragged location stands, even after the viewport it was centered on changes. */
+	@Test
+	public void keepsALocationTheUserDraggedIn()
+	{
+		stubViewport(1280, 0, 1280);
+		renderAndReadLocation();
+		overlay.setPreferredLocation(new Point(50, 300));
+		assertEquals(new Point(50, 300), renderAndReadLocation());
+
+		stubViewport(1600, 0, 1600);
+		assertEquals(new Point(50, 300), renderAndReadLocation());
+	}
+
+	/** Snapped to another corner, RuneLite places it - no location may be forced on top. */
+	@Test
+	public void leavesASnappedCornerAlone()
+	{
+		stubViewport(1280, 0, 1280);
+		renderAndReadLocation();
+		overlay.setPreferredPosition(OverlayPosition.TOP_LEFT);
+		overlay.setPreferredLocation(null);
+		assertNull(renderAndReadLocation());
+	}
+
+	/** Reset (or snapping back onto TOP_CENTER) clears both, which hands the panel back to centering. */
+	@Test
+	public void resumesCenteringAfterAReset()
+	{
+		stubViewport(1280, 0, 1280);
+		overlay.setPreferredLocation(new Point(50, 300));
+		renderAndReadLocation();
+		overlay.setPreferredPosition(null);
+		overlay.setPreferredLocation(null);
+		assertCenteredOn(640);
+	}
+
+	/** The previous frame's own point must not read as user-placed once the viewport moves. */
+	@Test
+	public void followsTheViewportAcrossFrames()
+	{
+		stubViewport(1280, 0, 1280);
+		assertCenteredOn(640);
+		stubViewport(1280, 108, 512);
+		assertCenteredOn(364);
 	}
 }

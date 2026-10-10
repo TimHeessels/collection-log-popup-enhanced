@@ -65,6 +65,10 @@ Each has a different popup style and color scheme. You can customize rarity tier
 
 # Appearance
 
+## Moving the popup
+While the preview is showing, hold Alt and drag the popup wherever you like, or onto one of the snap points. Hold Alt and right-click it to put it back at the top center.
+![alt text](image-9.png)
+
 ## Scaling
 You can also scale the popup and set text-rendering to what looks good to you. Crisp text looks best at higher scale, smooth at lower.
 

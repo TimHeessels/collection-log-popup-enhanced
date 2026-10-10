@@ -154,6 +154,8 @@ public class CollectionLogOverlay extends Overlay
 
 	private PendingItem current;
 	private long notificationStartMillis;
+	// The centered location #render last set, to tell it apart from one the user dragged in.
+	private Point lastAutoLocation;
 
 	// Told the item name once a popup released by #releaseHeld has finished opening - the plugin
 	// takes the delayed CoX collection log screenshot from it.
@@ -207,10 +209,7 @@ public class CollectionLogOverlay extends Overlay
 		// overlay (e.g. xp orb/drop plugins), so this panel always stays pinned at the very top.
 		setLayer(OverlayLayer.ABOVE_WIDGETS);
 		setPriority(PRIORITY_HIGHEST);
-		// The panel recenters itself on the viewport every frame (see #render) to line up with the
-		// native collection log popup, so letting the user drag/snap it elsewhere would just get
-		// silently undone next frame - disable that instead of leaving it non-functional.
-		setMovable(false);
+		setMovable(true);
 
 		loadArt(PanelStyle.COLORFUL, sourceBackgrounds, sourceIconFrames);
 		loadArt(PanelStyle.NEUTRAL, neutralBackgrounds, neutralIconFrames);
@@ -429,13 +428,20 @@ public class CollectionLogOverlay extends Overlay
 			applyColours(colours);
 		}
 
-		// Centers on the viewport rect, not the canvas: fixed/classic offsets it left of the sidebar,
-		// and the Fixed Resizable Hybrid plugin narrows it in resizable mode.
-		int viewportWidth = client.getViewportWidth();
-		int viewportCenterX = viewportWidth > 0
-			? client.getViewportXOffset() + viewportWidth / 2
-			: client.getRealDimensions().width / 2;
-		setPreferredLocation(new Point(viewportCenterX - (panelWidth / 2), TOP_MARGIN));
+		// Compared by value, not identity: an alt-click that doesn't move still saves our own point (see AGENTS.md).
+		Point placed = getPreferredLocation();
+		boolean userPlaced = getPreferredPosition() != null || (placed != null && !placed.equals(lastAutoLocation));
+		if (!userPlaced)
+		{
+			// Centers on the viewport rect, not the canvas: fixed/classic offsets it left of the sidebar,
+			// and the Fixed Resizable Hybrid plugin narrows it in resizable mode.
+			int viewportWidth = client.getViewportWidth();
+			int viewportCenterX = viewportWidth > 0
+				? client.getViewportXOffset() + viewportWidth / 2
+				: client.getRealDimensions().width / 2;
+			lastAutoLocation = new Point(viewportCenterX - (panelWidth / 2), TOP_MARGIN);
+			setPreferredLocation(lastAutoLocation);
+		}
 
 		if (current == null)
 		{

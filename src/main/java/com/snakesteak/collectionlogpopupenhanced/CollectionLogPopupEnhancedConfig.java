@@ -350,6 +350,33 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 		return TextRenderMode.CRISP;
 	}
 
+	@Range(min = 0, max = 100)
+	@ConfigItem(
+		keyName = "backgroundOpacity",
+		name = "Background opacity (%)",
+		description = "Background opacity",
+		position = 4,
+		section = appearanceSection
+	)
+	default int backgroundOpacity()
+	{
+		return 100;
+	}
+
+	// Floored above 0 so the popup can never be made entirely invisible.
+	@Range(min = 10, max = 100)
+	@ConfigItem(
+		keyName = "foregroundOpacity",
+		name = "Border & text opacity (%)",
+		description = "Foreground opacity",
+		position = 5,
+		section = appearanceSection
+	)
+	default int foregroundOpacity()
+	{
+		return 100;
+	}
+
 	@ConfigItem(
 		keyName = "panelStyle",
 		name = "Panel style",

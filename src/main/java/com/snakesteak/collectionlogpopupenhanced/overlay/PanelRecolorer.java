@@ -3,6 +3,8 @@ package com.snakesteak.collectionlogpopupenhanced.overlay;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityTier;
 import java.awt.Color;
 import java.awt.image.BufferedImage;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -32,6 +34,9 @@ final class PanelRecolorer
 	 * saturation alone, is what separates "structure" from "unsaturated artwork".
 	 */
 	private static final float OUTLINE_MAX_BRIGHTNESS = 0.5f;
+
+	// Not the achromatic test above: the Neutral art's outline is tinted (6,5,4), saturation 0.33.
+	private static final int OUTLINE_MAX_CHANNEL = 16;
 
 	/** Guards the ratio divisions below against a zero-saturation/brightness reference. */
 	private static final float MIN_DIVISOR = 0.001f;
@@ -150,6 +155,87 @@ final class PanelRecolorer
 			return targetSaturation;
 		}
 		return Math.min(1f, targetSaturation * (saturation / Math.max(MIN_DIVISOR, reference)));
+	}
+
+	/**
+	 * Marks the panel body: everything reachable from the centre without crossing a near-black
+	 * outline pixel.
+	 */
+	static boolean[] floodFillBodyMask(BufferedImage src)
+	{
+		int width = src.getWidth();
+		int height = src.getHeight();
+		boolean[] mask = new boolean[width * height];
+		Deque<Integer> pending = new ArrayDeque<>();
+		int start = (height / 2) * width + width / 2;
+		if (isBodyPixel(src.getRGB(width / 2, height / 2)))
+		{
+			mask[start] = true;
+			pending.add(start);
+		}
+		while (!pending.isEmpty())
+		{
+			int index = pending.poll();
+			int x = index % width;
+			int y = index / width;
+			int[][] neighbours = {{x + 1, y}, {x - 1, y}, {x, y + 1}, {x, y - 1}};
+			for (int[] n : neighbours)
+			{
+				if (n[0] < 0 || n[0] >= width || n[1] < 0 || n[1] >= height)
+				{
+					continue;
+				}
+				int neighbour = n[1] * width + n[0];
+				if (!mask[neighbour] && isBodyPixel(src.getRGB(n[0], n[1])))
+				{
+					mask[neighbour] = true;
+					pending.add(neighbour);
+				}
+			}
+		}
+		return mask;
+	}
+
+	/** Marks the panel body as a fixed rectangle, for art whose frame has no outline to stop a fill. */
+	static boolean[] insetBodyMask(int width, int height, int left, int top, int right, int bottom)
+	{
+		boolean[] mask = new boolean[width * height];
+		for (int y = top; y < height - bottom; y++)
+		{
+			for (int x = left; x < width - right; x++)
+			{
+				mask[y * width + x] = true;
+			}
+		}
+		return mask;
+	}
+
+	/**
+	 * Returns a copy of {@code src} with each pixel's alpha scaled by {@code background} where
+	 * {@code bodyMask} is set and by {@code foreground} elsewhere.
+	 */
+	static BufferedImage applyOpacity(BufferedImage src, boolean[] bodyMask, float background, float foreground)
+	{
+		int width = src.getWidth();
+		int height = src.getHeight();
+		BufferedImage out = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		for (int y = 0; y < height; y++)
+		{
+			for (int x = 0; x < width; x++)
+			{
+				int argb = src.getRGB(x, y);
+				float factor = bodyMask[y * width + x] ? background : foreground;
+				int alpha = Math.round(((argb >>> 24) & 0xFF) * factor);
+				out.setRGB(x, y, (alpha << 24) | (argb & 0xFFFFFF));
+			}
+		}
+		return out;
+	}
+
+	private static boolean isBodyPixel(int argb)
+	{
+		int maxChannel = Math.max((argb >> 16) & 0xFF, Math.max((argb >> 8) & 0xFF, argb & 0xFF));
+		return ((argb >>> 24) & 0xFF) != 0 && maxChannel > OUTLINE_MAX_CHANNEL;
 	}
 
 	private static float[] toHsb(Color color)

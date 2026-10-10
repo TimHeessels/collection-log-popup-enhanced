@@ -9,6 +9,7 @@ import javax.imageio.ImageIO;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class PanelRecolorerTest
@@ -181,6 +182,87 @@ public class PanelRecolorerTest
 					fromOpaque.getRGB(x, y), fromTranslucent.getRGB(x, y));
 			}
 		}
+	}
+
+	/** The fill must stop at the outline on every Colourful asset: covering the centre, never an edge. */
+	@Test
+	public void bodyMaskStaysInsideTheOutline() throws IOException
+	{
+		for (Object[] tier : TIERS)
+		{
+			for (int asset = 1; asset <= 2; asset++)
+			{
+				BufferedImage src = load((String) tier[asset]);
+				boolean[] mask = PanelRecolorer.floodFillBodyMask(src);
+				int width = src.getWidth();
+				int height = src.getHeight();
+				assertTrue(tier[asset] + " centre", mask[(height / 2) * width + width / 2]);
+				for (int x = 0; x < width; x++)
+				{
+					assertFalse(tier[asset] + " top edge at " + x, mask[x]);
+					assertFalse(tier[asset] + " bottom edge at " + x, mask[(height - 1) * width + x]);
+				}
+				for (int y = 0; y < height; y++)
+				{
+					assertFalse(tier[asset] + " left edge at " + y, mask[y * width]);
+					assertFalse(tier[asset] + " right edge at " + y, mask[y * width + width - 1]);
+				}
+			}
+		}
+	}
+
+	@Test
+	public void fullOpacityLeavesPixelsUnchanged() throws IOException
+	{
+		BufferedImage src = load("Icons/IconPanel3.png");
+		BufferedImage out = PanelRecolorer.applyOpacity(src, PanelRecolorer.floodFillBodyMask(src), 1f, 1f);
+		for (int y = 0; y < src.getHeight(); y++)
+		{
+			for (int x = 0; x < src.getWidth(); x++)
+			{
+				assertEquals("pixel at " + x + "," + y, src.getRGB(x, y), out.getRGB(x, y));
+			}
+		}
+	}
+
+	/** Body takes the background factor; the border stripe and the outline take the foreground's. */
+	@Test
+	public void opacitySplitsBodyFromBorder() throws IOException
+	{
+		BufferedImage src = load("Backgrounds/BackgroundPanel2.png");
+		BufferedImage out = PanelRecolorer.applyOpacity(src, PanelRecolorer.floodFillBodyMask(src), 0.2f, 0.6f);
+
+		// Measured on the art: y=64 runs outline (0-1), stripe (2-3), outline (4-5), body from 6.
+		assertEquals("body", 51, alpha(out, 190, 64));
+		assertEquals("stripe", 153, alpha(out, 2, 64));
+		assertEquals("outline", 153, alpha(out, 0, 64));
+		assertEquals("source untouched", 255, alpha(src, 190, 64));
+		assertEquals("colour kept", src.getRGB(190, 64) & 0xFFFFFF, out.getRGB(190, 64) & 0xFFFFFF);
+	}
+
+	@Test
+	public void transparentPixelsStayTransparent() throws IOException
+	{
+		BufferedImage src = load("Icons/IconPanel1.png");
+		BufferedImage out = PanelRecolorer.applyOpacity(src, PanelRecolorer.floodFillBodyMask(src), 1f, 1f);
+		assertEquals(0, alpha(src, 0, 0));
+		assertEquals(0, alpha(out, 0, 0));
+	}
+
+	@Test
+	public void insetMaskCoversOnlyTheInsetRectangle()
+	{
+		boolean[] mask = PanelRecolorer.insetBodyMask(10, 8, 2, 1, 3, 4);
+		assertFalse(mask[1 * 10 + 1]);
+		assertTrue(mask[1 * 10 + 2]);
+		assertTrue(mask[3 * 10 + 6]);
+		assertFalse(mask[3 * 10 + 7]);
+		assertFalse(mask[4 * 10 + 2]);
+	}
+
+	private static int alpha(BufferedImage image, int x, int y)
+	{
+		return (image.getRGB(x, y) >>> 24) & 0xFF;
 	}
 
 	private static void assertChannelsWithinOne(String name, int x, int y, int expected, int actual)

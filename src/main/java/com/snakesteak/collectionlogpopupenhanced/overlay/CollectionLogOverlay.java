@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.DoubleSummaryStatistics;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +116,10 @@ public class CollectionLogOverlay extends Overlay
 	// one config value meaning two different things. Alpha is stripped on read instead, everywhere.
 	private static final int RGB_MASK = 0xFFFFFF;
 
+	// Neutral body insets {left, top, right, bottom}, measured off the art: its outline has gaps a flood fill leaks through.
+	private static final int[] NEUTRAL_PANEL_BODY_INSETS = {7, 7, 8, 8};
+	private static final int[] NEUTRAL_ICON_BODY_INSETS = {10, 9, 9, 9};
+
 	private static final float BASE_CORNER_LABEL_FONT_SIZE = 16f;
 	private static final float BASE_CORNER_VALUE_FONT_SIZE = 19f;
 	private static final float BASE_NAME_FONT_SIZE = 27f;
@@ -142,6 +147,8 @@ public class CollectionLogOverlay extends Overlay
 	// Drawn as-is, never recoloured - loaded up front so switching style needs no jar IO.
 	private final Map<RarityTier, BufferedImage> neutralBackgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> neutralIconFrames = new EnumMap<>(RarityTier.class);
+	// Which pixels the background opacity applies to, per source image; the rest take the foreground's.
+	private final Map<BufferedImage, boolean[]> bodyMasks = new IdentityHashMap<>();
 	// What actually gets drawn - the source art recoloured to the configured per-tier colours.
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
@@ -169,6 +176,9 @@ public class CollectionLogOverlay extends Overlay
 	// #readColours), so #render can detect a change cheaply; null until #applyColours has run.
 	private int[] lastColours;
 	private boolean textOutlineEnabled;
+	// The configured opacities as 0-1 factors, refreshed alongside the art by #applyColours.
+	private float backgroundOpacity = 1f;
+	private float foregroundOpacity = 1f;
 	private int panelWidth;
 	private int panelHeight;
 	private int iconCanvasSize;
@@ -213,6 +223,13 @@ public class CollectionLogOverlay extends Overlay
 
 		loadArt(PanelStyle.COLORFUL, sourceBackgrounds, sourceIconFrames);
 		loadArt(PanelStyle.NEUTRAL, neutralBackgrounds, neutralIconFrames);
+		for (RarityTier tier : RarityTier.values())
+		{
+			bodyMasks.put(sourceBackgrounds.get(tier), PanelRecolorer.floodFillBodyMask(sourceBackgrounds.get(tier)));
+			bodyMasks.put(sourceIconFrames.get(tier), PanelRecolorer.floodFillBodyMask(sourceIconFrames.get(tier)));
+			bodyMasks.put(neutralBackgrounds.get(tier), insetBodyMask(neutralBackgrounds.get(tier), NEUTRAL_PANEL_BODY_INSETS));
+			bodyMasks.put(neutralIconFrames.get(tier), insetBodyMask(neutralIconFrames.get(tier), NEUTRAL_ICON_BODY_INSETS));
+		}
 
 		applyScale(config.overlayScalePercent());
 		applyColours(readColours());
@@ -268,14 +285,16 @@ public class CollectionLogOverlay extends Overlay
 	private int[] readColours()
 	{
 		RarityTier[] tiers = RarityTier.values();
-		int[] key = new int[tiers.length + 2];
+		int[] key = new int[tiers.length + 4];
 		for (int i = 0; i < tiers.length; i++)
 		{
 			key[i] = tierColor(tiers[i]).getRGB();
 		}
-		// Part of the cache key, not colours: changing either re-derives every background.
+		// Part of the cache key, not colours: changing any of these re-derives every background.
 		key[tiers.length] = config.backgroundDarkness();
 		key[tiers.length + 1] = config.panelStyle().ordinal();
+		key[tiers.length + 2] = config.backgroundOpacity();
+		key[tiers.length + 3] = config.foregroundOpacity();
 		return key;
 	}
 
@@ -287,12 +306,14 @@ public class CollectionLogOverlay extends Overlay
 	{
 		int darkness = config.backgroundDarkness();
 		boolean neutral = config.panelStyle() == PanelStyle.NEUTRAL;
+		backgroundOpacity = config.backgroundOpacity() / 100f;
+		foregroundOpacity = config.foregroundOpacity() / 100f;
 		for (RarityTier tier : RarityTier.values())
 		{
 			if (neutral)
 			{
-				backgrounds.put(tier, neutralBackgrounds.get(tier));
-				iconFrames.put(tier, neutralIconFrames.get(tier));
+				backgrounds.put(tier, withOpacity(neutralBackgrounds.get(tier), neutralBackgrounds.get(tier)));
+				iconFrames.put(tier, withOpacity(neutralIconFrames.get(tier), neutralIconFrames.get(tier)));
 				progressBarTrackColors.put(tier,
 					PanelRecolorer.deriveBackground(Color.WHITE, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
 				continue;
@@ -300,12 +321,29 @@ public class CollectionLogOverlay extends Overlay
 
 			Color border = tierColor(tier);
 			Color background = PanelRecolorer.deriveBackground(border, darkness);
-			backgrounds.put(tier, PanelRecolorer.recolor(sourceBackgrounds.get(tier), tier, border, background));
-			iconFrames.put(tier, PanelRecolorer.recolor(sourceIconFrames.get(tier), tier, border, background));
+			BufferedImage panel = sourceBackgrounds.get(tier);
+			BufferedImage frame = sourceIconFrames.get(tier);
+			backgrounds.put(tier, withOpacity(panel, PanelRecolorer.recolor(panel, tier, border, background)));
+			iconFrames.put(tier, withOpacity(frame, PanelRecolorer.recolor(frame, tier, border, background)));
 			progressBarTrackColors.put(tier,
 				PanelRecolorer.deriveBackground(border, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
 		}
 		lastColours = colours;
+	}
+
+	/** {@code art} with the configured opacities applied, split by {@code source}'s body mask. */
+	private BufferedImage withOpacity(BufferedImage source, BufferedImage art)
+	{
+		if (backgroundOpacity >= 1f && foregroundOpacity >= 1f)
+		{
+			return art;
+		}
+		return PanelRecolorer.applyOpacity(art, bodyMasks.get(source), backgroundOpacity, foregroundOpacity);
+	}
+
+	private static boolean[] insetBodyMask(BufferedImage image, int[] insets)
+	{
+		return PanelRecolorer.insetBodyMask(image.getWidth(), image.getHeight(), insets[0], insets[1], insets[2], insets[3]);
 	}
 
 	private static void loadArt(PanelStyle style, Map<RarityTier, BufferedImage> panels, Map<RarityTier, BufferedImage> frames)
@@ -428,7 +466,7 @@ public class CollectionLogOverlay extends Overlay
 			applyColours(colours);
 		}
 
-		// Compared by value, not identity: an alt-click that doesn't move still saves our own point (see AGENTS.md).
+		// Compared by value, not identity: an alt-click that doesn't move still saves our own point.
 		Point placed = getPreferredLocation();
 		boolean userPlaced = getPreferredPosition() != null || (placed != null && !placed.equals(lastAutoLocation));
 		if (!userPlaced)
@@ -511,13 +549,11 @@ public class CollectionLogOverlay extends Overlay
 			// past where the fold has actually reached yet.
 			graphics.clip(new Rectangle2D.Float(0, 0, panelWidth, panelHeight));
 		}
-		if (fadeAlpha < 1f)
-		{
-			graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, fadeAlpha));
-		}
-
+		// The art carries its opacities baked in (see #applyColours); text is scaled here instead.
+		setAlpha(graphics, originalComposite, fadeAlpha);
 		graphics.drawImage(backgrounds.get(current.getTier()), 0, 0, panelWidth, panelHeight, null);
-		drawPanelContent(graphics);
+		setAlpha(graphics, originalComposite, fadeAlpha * foregroundOpacity);
+		drawPanelContent(graphics, originalComposite, fadeAlpha);
 
 		graphics.setClip(originalClip);
 		graphics.setComposite(originalComposite);
@@ -543,11 +579,9 @@ public class CollectionLogOverlay extends Overlay
 			graphics.scale(iconScale, iconScale);
 			graphics.translate(-iconCenterX, -iconCenterY);
 
-			if (iconAlpha < 1f)
-			{
-				graphics.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, iconAlpha)));
-			}
+			setAlpha(graphics, originalComposite, iconAlpha);
 			graphics.drawImage(iconFrames.get(current.getTier()), iconX, iconY, iconCanvasSize, iconCanvasSize, null);
+			setAlpha(graphics, originalComposite, iconAlpha * foregroundOpacity);
 			drawItemSprite(graphics, itemSprite);
 			graphics.setComposite(originalComposite);
 			graphics.setTransform(base);
@@ -590,7 +624,16 @@ public class CollectionLogOverlay extends Overlay
 		graphics.drawString(text, x, y);
 	}
 
-	private void drawPanelContent(Graphics2D graphics)
+	private static void setAlpha(Graphics2D graphics, Composite original, float alpha)
+	{
+		graphics.setComposite(alpha < 1f ? AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0f, alpha)) : original);
+	}
+
+	/**
+	 * @param fadeAlpha the panel's fade, which the text composite already includes - passed on so the
+	 *                  progress track can swap to the background opacity for its own fill
+	 */
+	private void drawPanelContent(Graphics2D graphics, Composite original, float fadeAlpha)
 	{
 		// Drawn top-to-bottom to match the fold-open reveal (see #render), which clips progressively
 		// from the panel's top edge downward: caption, then name, then the bottom corner stats.
@@ -608,7 +651,7 @@ public class CollectionLogOverlay extends Overlay
 		int nameX = (panelWidth - graphics.getFontMetrics().stringWidth(fittedName.getText())) / 2;
 		drawOutlinedString(graphics, fittedName.getText(), nameX, nameBaselineY, accentColor(current.getTier()));
 
-		drawProgressBar(graphics);
+		drawProgressBar(graphics, original, fadeAlpha);
 
 		FontMetrics cornerLabelMetrics = graphics.getFontMetrics(cornerLabelFont);
 		FontMetrics cornerValueMetrics = graphics.getFontMetrics(cornerValueFont);
@@ -635,15 +678,18 @@ public class CollectionLogOverlay extends Overlay
 	 *
 	 * <p>{@code fillRect} rather than a stroked or rounded shape on purpose: shape antialiasing is
 	 * never enabled here and {@code STROKE_PURE} is set only in the SMOOTH text modes (see #render),
-	 * so anything stroked would rasterize differently between text modes. Does not touch the
-	 * composite - it inherits the panel's fold and fade, and setting its own would clobber the fade.
+	 * so anything stroked would rasterize differently between text modes. The track is part of the
+	 * background and the fill part of the foreground, so each takes that opacity times the fade.
+	 * Leaves the composite at the foreground's for the text drawn after it.
 	 */
-	private void drawProgressBar(Graphics2D graphics)
+	private void drawProgressBar(Graphics2D graphics, Composite original, float fadeAlpha)
 	{
 		// The track is drawn either way: with the bar turned off it stands in for the divider line the
 		// panel art used to carry, which looks the same as a bar at 0%.
+		setAlpha(graphics, original, fadeAlpha * backgroundOpacity);
 		graphics.setColor(progressBarTrackColors.get(current.getTier()));
 		graphics.fillRect(progressBarX, progressBarTopY, progressBarWidth, progressBarHeight);
+		setAlpha(graphics, original, fadeAlpha * foregroundOpacity);
 
 		if (!config.showProgressBar())
 		{

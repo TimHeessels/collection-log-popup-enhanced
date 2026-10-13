@@ -64,12 +64,12 @@ public final class CoxLootParser
 		{
 			return null;
 		}
-		String stripped = Text.removeTags(message);
+		String stripped = plain(message);
 		return Arrays.stream(UNIQUES_BY_LENGTH).filter(stripped::contains).findFirst().orElse(null);
 	}
 
 	/**
-	 * The raid party's own broadcast, "Name - Item", sent as a friends chat notification.
+	 * The raid party's own broadcast, "Name - Item". Its message type is unconfirmed, so callers try several.
 	 */
 	public static Optional<LootBroadcast> parsePartyLoot(String message)
 	{
@@ -79,7 +79,7 @@ public final class CoxLootParser
 			return Optional.empty();
 		}
 
-		String stripped = Text.removeTags(message).trim();
+		String stripped = plain(message).trim();
 		int index = stripped.indexOf(" - " + item);
 		if (index <= 0)
 		{
@@ -93,7 +93,7 @@ public final class CoxLootParser
 	 */
 	public static Optional<LootBroadcast> parseClanBroadcast(String message)
 	{
-		Matcher matcher = CLAN_BROADCAST.matcher(Text.removeTags(message).trim());
+		Matcher matcher = CLAN_BROADCAST.matcher(plain(message).trim());
 		if (!matcher.matches())
 		{
 			return Optional.empty();
@@ -153,6 +153,12 @@ public final class CoxLootParser
 			stripped = stripped.substring(NOTIFICATION_PREFIX.length()).trim();
 		}
 		return findUnique(stripped);
+	}
+
+	// Player names in chat can use non-breaking spaces, which would break the " - " and " received " matches.
+	private static String plain(String message)
+	{
+		return Text.removeTags(message).replace('\u00A0', ' ');
 	}
 
 	@Value

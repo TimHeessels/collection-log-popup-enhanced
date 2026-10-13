@@ -27,6 +27,18 @@ public class CoxLootParserTest
 	}
 
 	@Test
+	public void parsesThePartyBroadcastInOneColourWithNonBreakingSpaces()
+	{
+		CoxLootParser.LootBroadcast expected = new CoxLootParser.LootBroadcast("Some Player", "Ancestral robe bottom");
+		assertEquals(Optional.of(expected),
+			CoxLootParser.parsePartyLoot("<col=ef1020>Some Player - Ancestral robe bottom</col>"));
+		assertEquals(Optional.of(expected),
+			CoxLootParser.parsePartyLoot("Some Player - Ancestral robe bottom"));
+		assertEquals(Optional.of(expected), CoxLootParser.parseClanBroadcast(
+			"<img=22>Some Player received special loot from a raid: Ancestral robe bottom (79,017,444 coins)."));
+	}
+
+	@Test
 	public void parsesEachClanBroadcast()
 	{
 		CoxLootParser.LootBroadcast expected = new CoxLootParser.LootBroadcast("Some Player", "Kodai insignia");

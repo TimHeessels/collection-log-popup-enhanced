@@ -585,9 +585,11 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		String player = otherName.isEmpty() ? localName : otherName;
 
 		client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION, "",
-			"<col=ef20ff>" + player + " - </col><col=ff0000>" + item + "</col>", null);
+			"<col=ef1020>" + player + " - " + item + "</col>", null);
 		client.addChatMessage(ChatMessageType.CLAN_MESSAGE, "",
 			player + " received special loot from a raid: " + item + " (1,234,567 coins)", null);
+		client.addChatMessage(ChatMessageType.CLAN_MESSAGE, "",
+			player + " received a new collection log item: " + item + " (975/1717)", null);
 		if (player.equalsIgnoreCase(localName))
 		{
 			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",

@@ -14,6 +14,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.geom.AffineTransform;
@@ -132,6 +133,28 @@ public class CollectionLogOverlay extends Overlay
 	private static final long ICON_POP_MILLIS = 400;
 	private static final long FADE_MILLIS = 400;
 
+	// Compact layout: one short panel, the icon unframed in a left column behind a divider, the
+	// caption, name and stats stacked to its right, and the progress bar along the bottom.
+	private static final int COMPACT_PANEL_HEIGHT = 92;
+	private static final int COMPACT_ICON_CENTER_X = 35;
+	private static final int COMPACT_ICON_CENTER_Y = 44;
+	private static final int COMPACT_ICON_BOX_SIZE = 52;
+	private static final int COMPACT_ICON_TARGET_SIZE = 44;
+	private static final int COMPACT_DIVIDER_X = 66;
+	private static final int COMPACT_DIVIDER_WIDTH = 2;
+	private static final int COMPACT_DIVIDER_TOP_Y = 10;
+	// Ends clear of the progress bar, which runs underneath it.
+	private static final int COMPACT_DIVIDER_BOTTOM_Y = 78;
+	private static final int COMPACT_TEXT_X = 76;
+	private static final int COMPACT_RIGHT_MARGIN = 14;
+	private static final int COMPACT_CAPTION_BASELINE_Y = 21;
+	private static final int COMPACT_NAME_BASELINE_Y = 49;
+	// Both stats on one line, labels in the game's small font - the narrowest that still reads.
+	private static final int COMPACT_STATS_BASELINE_Y = 72;
+	private static final int COMPACT_STAT_GAP = 12;
+	private static final float COMPACT_STAT_LABEL_FONT_SIZE = 16f;
+	private static final int COMPACT_PROGRESS_BAR_HEIGHT = 4;
+
 	private static final float ICON_MIN_SCALE = 0.4f;
 	private static final float FOLD_OVERSHOOT = 1.0f;
 	private static final float ICON_POP_OVERSHOOT = 1.9f;
@@ -152,6 +175,9 @@ public class CollectionLogOverlay extends Overlay
 	// What actually gets drawn - the source art recoloured to the configured per-tier colours.
 	private final Map<RarityTier, BufferedImage> backgrounds = new EnumMap<>(RarityTier.class);
 	private final Map<RarityTier, BufferedImage> iconFrames = new EnumMap<>(RarityTier.class);
+	private final Map<RarityTier, BufferedImage> compactBackgrounds = new EnumMap<>(RarityTier.class);
+	// The body inside each compact panel's frame, in art pixels: the progress bar runs along its bottom edge.
+	private final Map<RarityTier, Rectangle> compactBodies = new EnumMap<>(RarityTier.class);
 	// A step darker than the panel body: at the same shade the bar reads as a floating stripe rather
 	// than a fill inside a recess. Cached alongside the art - same inputs, and otherwise per-frame.
 	private final Map<RarityTier, Color> progressBarTrackColors = new EnumMap<>(RarityTier.class);
@@ -172,6 +198,8 @@ public class CollectionLogOverlay extends Overlay
 	// Scaled layout/font state, recomputed by #applyScale only when config.overlayScalePercent()
 	// changes (rather than every frame) since Font#deriveFont isn't free to call 50x/sec for nothing.
 	private int lastScalePercent = -1;
+	private PanelLayout lastLayout;
+	private boolean compact;
 	// Cache key for the recoloured art: the five tier colours plus the background darkness (see
 	// #readColours), so #render can detect a change cheaply; null until #applyColours has run.
 	private int[] lastColours;
@@ -199,12 +227,21 @@ public class CollectionLogOverlay extends Overlay
 	private int progressBarHeight;
 	private int progressBarX;
 	private int progressBarWidth;
+	private int dividerX;
+	private int dividerY;
+	private int dividerWidth;
+	private int dividerHeight;
+	private int textX;
+	private int textMaxWidth;
+	private int statsBaselineY;
+	private int statGap;
 	private float nameFontMinSize;
 	private Font cornerLabelFont;
 	private Font cornerValueFont;
 	private Font cornerMultiValueFont;
 	private Font nameFont;
 	private Font captionFont;
+	private Font compactStatLabelFont;
 
 	@Inject
 	public CollectionLogOverlay(Client client, ItemManager itemManager, CollectionLogPopupEnhancedConfig config, SoundManager soundManager)
@@ -231,7 +268,7 @@ public class CollectionLogOverlay extends Overlay
 			bodyMasks.put(neutralIconFrames.get(tier), insetBodyMask(neutralIconFrames.get(tier), NEUTRAL_ICON_BODY_INSETS));
 		}
 
-		applyScale(config.overlayScalePercent());
+		applyScale(config.overlayScalePercent(), config.panelLayout());
 		applyColours(readColours());
 	}
 
@@ -240,7 +277,7 @@ public class CollectionLogOverlay extends Overlay
 	 * text is rasterized natively at the target size rather than blurred by stretching a fixed-size
 	 * raster. Cheap, but only worth doing when the configured scale actually changes (see #render).
 	 */
-	private void applyScale(int scalePercent)
+	private void applyScale(int scalePercent, PanelLayout layout)
 	{
 		float scale = scalePercent / 100f;
 
@@ -277,7 +314,40 @@ public class CollectionLogOverlay extends Overlay
 		nameFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_NAME_FONT_SIZE * scale);
 		captionFont = FontManager.getRunescapeBoldFont().deriveFont(BASE_CAPTION_FONT_SIZE * scale);
 
+		compact = layout == PanelLayout.COMPACT;
+		if (compact)
+		{
+			applyCompactScale(scale);
+		}
+
 		lastScalePercent = scalePercent;
+		lastLayout = layout;
+	}
+
+	/** Overrides the extended geometry {@link #applyScale} just set with the compact layout's. */
+	private void applyCompactScale(float scale)
+	{
+		panelHeight = Math.round(COMPACT_PANEL_HEIGHT * scale);
+		iconCanvasSize = Math.round(COMPACT_ICON_BOX_SIZE * scale);
+		iconX = Math.round(COMPACT_ICON_CENTER_X * scale) - iconCanvasSize / 2;
+		iconY = Math.round(COMPACT_ICON_CENTER_Y * scale) - iconCanvasSize / 2;
+		iconTargetSize = Math.round(COMPACT_ICON_TARGET_SIZE * scale);
+
+		dividerX = Math.round(COMPACT_DIVIDER_X * scale);
+		dividerY = Math.round(COMPACT_DIVIDER_TOP_Y * scale);
+		dividerWidth = Math.max(1, Math.round(COMPACT_DIVIDER_WIDTH * scale));
+		dividerHeight = Math.round(COMPACT_DIVIDER_BOTTOM_Y * scale) - dividerY;
+
+		textX = Math.round(COMPACT_TEXT_X * scale);
+		textMaxWidth = panelWidth - textX - Math.round(COMPACT_RIGHT_MARGIN * scale);
+		captionBaselineY = Math.round(COMPACT_CAPTION_BASELINE_Y * scale);
+		nameBaselineY = Math.round(COMPACT_NAME_BASELINE_Y * scale);
+		statsBaselineY = Math.round(COMPACT_STATS_BASELINE_Y * scale);
+		statGap = Math.round(COMPACT_STAT_GAP * scale);
+		compactStatLabelFont = FontManager.getRunescapeSmallFont().deriveFont(COMPACT_STAT_LABEL_FONT_SIZE * scale);
+
+		// The rest of the bar's geometry depends on the tier's frame - see #placeCompactProgressBar.
+		progressBarHeight = Math.max(1, Math.round(COMPACT_PROGRESS_BAR_HEIGHT * scale));
 	}
 
 	// Purely a change detector - the rebuild re-reads each colour by tier (see #applyColours), so
@@ -328,7 +398,48 @@ public class CollectionLogOverlay extends Overlay
 			progressBarTrackColors.put(tier,
 				PanelRecolorer.deriveBackground(border, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
 		}
+		for (RarityTier tier : RarityTier.values())
+		{
+			BufferedImage source = (neutral ? neutralBackgrounds : sourceBackgrounds).get(tier);
+			compactBackgrounds.put(tier, withoutMiddleRows(backgrounds.get(tier), COMPACT_PANEL_HEIGHT));
+			compactBodies.put(tier, compactBody(source, bodyMasks.get(source)));
+		}
 		lastColours = colours;
+	}
+
+	/** The bounds of {@code source}'s body mask, moved to where the compact cut leaves its bottom edge. */
+	private static Rectangle compactBody(BufferedImage source, boolean[] mask)
+	{
+		int width = source.getWidth();
+		int left = width;
+		int right = -1;
+		int top = source.getHeight();
+		int bottom = -1;
+		for (int i = 0; i < mask.length; i++)
+		{
+			if (mask[i])
+			{
+				left = Math.min(left, i % width);
+				right = Math.max(right, i % width);
+				top = Math.min(top, i / width);
+				bottom = Math.max(bottom, i / width);
+			}
+		}
+		int bottomInset = source.getHeight() - 1 - bottom;
+		return new Rectangle(left, top, right - left + 1, COMPACT_PANEL_HEIGHT - bottomInset - top);
+	}
+
+	// Cut rather than scaled, so the frame and the Neutral corner studs stay pixel-exact.
+	private static BufferedImage withoutMiddleRows(BufferedImage art, int height)
+	{
+		int top = height / 2;
+		int bottom = height - top;
+		BufferedImage cut = new BufferedImage(art.getWidth(), height, BufferedImage.TYPE_INT_ARGB);
+		Graphics2D graphics = cut.createGraphics();
+		graphics.drawImage(art.getSubimage(0, 0, art.getWidth(), top), 0, 0, null);
+		graphics.drawImage(art.getSubimage(0, art.getHeight() - bottom, art.getWidth(), bottom), 0, top, null);
+		graphics.dispose();
+		return cut;
 	}
 
 	/** {@code art} with the configured opacities applied, split by {@code source}'s body mask. */
@@ -455,9 +566,10 @@ public class CollectionLogOverlay extends Overlay
 		}
 
 		int scalePercent = config.overlayScalePercent();
-		if (scalePercent != lastScalePercent)
+		PanelLayout layout = config.panelLayout();
+		if (scalePercent != lastScalePercent || layout != lastLayout)
 		{
-			applyScale(scalePercent);
+			applyScale(scalePercent, layout);
 		}
 
 		int[] colours = readColours();
@@ -551,9 +663,16 @@ public class CollectionLogOverlay extends Overlay
 		}
 		// The art carries its opacities baked in (see #applyColours); text is scaled here instead.
 		setAlpha(graphics, originalComposite, fadeAlpha);
-		graphics.drawImage(backgrounds.get(current.getTier()), 0, 0, panelWidth, panelHeight, null);
+		graphics.drawImage((compact ? compactBackgrounds : backgrounds).get(current.getTier()), 0, 0, panelWidth, panelHeight, null);
 		setAlpha(graphics, originalComposite, fadeAlpha * foregroundOpacity);
-		drawPanelContent(graphics, originalComposite, fadeAlpha);
+		if (compact)
+		{
+			drawCompactPanelContent(graphics, originalComposite, fadeAlpha);
+		}
+		else
+		{
+			drawPanelContent(graphics, originalComposite, fadeAlpha);
+		}
 
 		graphics.setClip(originalClip);
 		graphics.setComposite(originalComposite);
@@ -579,16 +698,19 @@ public class CollectionLogOverlay extends Overlay
 			graphics.scale(iconScale, iconScale);
 			graphics.translate(-iconCenterX, -iconCenterY);
 
-			setAlpha(graphics, originalComposite, iconAlpha);
-			graphics.drawImage(iconFrames.get(current.getTier()), iconX, iconY, iconCanvasSize, iconCanvasSize, null);
+			if (!compact)
+			{
+				setAlpha(graphics, originalComposite, iconAlpha);
+				graphics.drawImage(iconFrames.get(current.getTier()), iconX, iconY, iconCanvasSize, iconCanvasSize, null);
+			}
 			setAlpha(graphics, originalComposite, iconAlpha * foregroundOpacity);
 			drawItemSprite(graphics, itemSprite);
 			graphics.setComposite(originalComposite);
 			graphics.setTransform(base);
 		}
 
-		// Height includes the icon frame's bottom half, which now straddles the panel's bottom edge.
-		return new Dimension(panelWidth, panelHeight + iconCanvasSize / 2);
+		// Extended's height includes the icon frame's bottom half, which straddles the panel's bottom edge.
+		return new Dimension(panelWidth, compact ? panelHeight : panelHeight + iconCanvasSize / 2);
 	}
 
 	private void drawItemSprite(Graphics2D graphics, BufferedImage sprite)
@@ -638,10 +760,7 @@ public class CollectionLogOverlay extends Overlay
 		// Drawn top-to-bottom to match the fold-open reveal (see #render), which clips progressively
 		// from the panel's top edge downward: caption, then name, then the bottom corner stats.
 		graphics.setFont(captionFont);
-		// Neutral art carries no tier colour, so the caption names the tier instead.
-		String caption = config.panelStyle() == PanelStyle.NEUTRAL
-			? current.getTier().getLabel() + " " + CAPTION_TEXT
-			: CAPTION_TEXT;
+		String caption = caption();
 		int captionX = (panelWidth - graphics.getFontMetrics().stringWidth(caption)) / 2;
 		drawOutlinedString(graphics, caption, captionX, captionBaselineY, opaque(config.colourCaption()));
 
@@ -670,6 +789,121 @@ public class CollectionLogOverlay extends Overlay
 			drawCornerStat(graphics, rightStat, panelWidth - cornerPaddingX, true, cornerLabelMetrics, cornerValueMetrics);
 		}
 	}
+
+	// Neutral art carries no tier colour, so the caption names the tier instead.
+	private String caption()
+	{
+		return config.panelStyle() == PanelStyle.NEUTRAL
+			? current.getTier().getLabel() + " " + CAPTION_TEXT
+			: CAPTION_TEXT;
+	}
+
+	private void drawCompactPanelContent(Graphics2D graphics, Composite original, float fadeAlpha)
+	{
+		RarityTier tier = current.getTier();
+		int textRight = textX + textMaxWidth;
+
+		graphics.setFont(captionFont);
+		drawOutlinedString(graphics, caption(), textX, captionBaselineY, opaque(config.colourCaption()));
+
+		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, textMaxWidth, nameFontMinSize);
+		graphics.setFont(fittedName.getFont());
+		drawOutlinedString(graphics, fittedName.getText(), textX, nameBaselineY, accentColor(tier));
+
+		drawCompactStats(graphics, textRight);
+
+		// The divider is part of the background, like the progress track drawn after it.
+		setAlpha(graphics, original, fadeAlpha * backgroundOpacity);
+		graphics.setColor(progressBarTrackColors.get(tier));
+		graphics.fillRect(dividerX, dividerY, dividerWidth, dividerHeight);
+		setAlpha(graphics, original, fadeAlpha * foregroundOpacity);
+
+		// Unlike extended, there is no divider line for an empty track to stand in for.
+		if (config.showProgressBar())
+		{
+			placeCompactProgressBar(tier);
+			drawProgressBar(graphics, original, fadeAlpha);
+		}
+	}
+
+	/**
+	 * Draws the left stat from the text column's left edge and the right one against its right edge,
+	 * each as "label value" on the same baseline.
+	 *
+	 * <p>The widest real pair ("Beginner caskets 12,345" with a two-source drop range) cannot fit even
+	 * in the small font, so where the pair overflows the right stat tries its compact value, then drops
+	 * its label (a drop rate or gp value reads without it) with exact digits, then compact, then truncates.
+	 */
+	private void drawCompactStats(Graphics2D graphics, int textRight)
+	{
+		Stat leftStat = resolveStatWithFallback(config.leftPanelStat().toPanelStat(), current);
+		Stat rightStat = resolveStatWithFallback(config.rightPanelStat().toPanelStat(), current);
+		FontMetrics labelMetrics = graphics.getFontMetrics(compactStatLabelFont);
+		FontMetrics valueMetrics = graphics.getFontMetrics(cornerValueFont);
+
+		String leftLabel = leftStat != null ? inlineLabel(leftStat) : "";
+		String leftValue = leftStat != null ? String.join(" ", leftStat.getValueLines()) : "";
+		int leftWidth = labelMetrics.stringWidth(leftLabel) + valueMetrics.stringWidth(leftValue);
+		if (leftStat != null)
+		{
+			drawCompactStat(graphics, leftLabel, leftValue, textX, leftStat.getValueColor());
+		}
+		if (rightStat == null)
+		{
+			return;
+		}
+
+		int available = textMaxWidth - (leftStat != null ? leftWidth + statGap : 0);
+		if (available <= 0)
+		{
+			return;
+		}
+		String exact = String.join(" ", rightStat.getValueLines());
+		String shorter = rightStat.getCompactValueLines() != null ? String.join(" ", rightStat.getCompactValueLines()) : exact;
+		String rightLabel = inlineLabel(rightStat);
+		String rightValue = exact;
+		// The label outranks exact digits, but once it is dropped the exact value gets another try.
+		for (String[] candidate : new String[][]{{rightLabel, exact}, {rightLabel, shorter}, {"", exact}, {"", shorter}})
+		{
+			rightLabel = candidate[0];
+			rightValue = candidate[1];
+			if (labelMetrics.stringWidth(rightLabel) + valueMetrics.stringWidth(rightValue) <= available)
+			{
+				break;
+			}
+		}
+		rightValue = truncate(graphics, rightValue, cornerValueFont, available);
+		int rightWidth = labelMetrics.stringWidth(rightLabel) + valueMetrics.stringWidth(rightValue);
+		drawCompactStat(graphics, rightLabel, rightValue, textRight - rightWidth, rightStat.getValueColor());
+	}
+
+	private void drawCompactStat(Graphics2D graphics, String label, String value, int x, Color valueColor)
+	{
+		graphics.setFont(compactStatLabelFont);
+		drawOutlinedString(graphics, label, x, statsBaselineY, opaque(config.colourStatLabel()));
+		x += graphics.getFontMetrics().stringWidth(label);
+		graphics.setFont(cornerValueFont);
+		drawOutlinedString(graphics, value, x, statsBaselineY, valueColor);
+	}
+
+	// "Obtained by: " -> "Obtained by ": the font change already sets the label off from its value.
+	private static String inlineLabel(Stat stat)
+	{
+		String label = stat.getLabel().trim();
+		return (label.endsWith(":") ? label.substring(0, label.length() - 1) : label) + " ";
+	}
+
+	/** Lays the bar along the bottom of the tier's panel body, edge to edge inside the frame. */
+	private void placeCompactProgressBar(RarityTier tier)
+	{
+		Rectangle body = compactBodies.get(tier);
+		float scaleX = panelWidth / (float) compactBackgrounds.get(tier).getWidth();
+		float scaleY = panelHeight / (float) COMPACT_PANEL_HEIGHT;
+		progressBarX = Math.round(body.x * scaleX);
+		progressBarWidth = Math.round((body.x + body.width) * scaleX) - progressBarX;
+		progressBarTopY = Math.round((body.y + body.height) * scaleY) - progressBarHeight;
+	}
+
 
 	/**
 	 * Draws overall collection log completion as a filled track in the band the art's divider line

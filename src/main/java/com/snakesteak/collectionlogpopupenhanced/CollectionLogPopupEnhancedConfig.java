@@ -2,6 +2,7 @@ package com.snakesteak.collectionlogpopupenhanced;
 
 import com.snakesteak.collectionlogpopupenhanced.cox.CoxChatCensorMode;
 import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
+import com.snakesteak.collectionlogpopupenhanced.overlay.PanelLayout;
 import com.snakesteak.collectionlogpopupenhanced.overlay.PanelStyle;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.TextRenderMode;
@@ -26,7 +27,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 
 	@ConfigSection(
 		name = "Style",
-		description = "Colourful, neutral (OSRS-style) or sound only",
+		description = "Colourful, neutral (OSRS-style) or sound only, in an extended or compact layout",
 		position = 1
 	)
 	String styleSection = "styleSection";
@@ -387,6 +388,18 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	default PanelStyle panelStyle()
 	{
 		return PanelStyle.COLORFUL;
+	}
+
+	@ConfigItem(
+		keyName = "panelLayout",
+		name = "Layout",
+		description = "Extended shows the full panel with the framed icon below it, compact a single short panel with the icon inside",
+		position = 1,
+		section = styleSection
+	)
+	default PanelLayout panelLayout()
+	{
+		return PanelLayout.EXTENDED;
 	}
 
 	@ConfigItem(

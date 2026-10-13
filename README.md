@@ -28,9 +28,8 @@ In settings menu, enable:
 At the bottom of the page is an explaination of why the native popup has to be active even though we use our own popup.
 
 # Visuals
-You can choose between two visual styles, or audio only.
-
-![alt text](image-6.png)
+You can choose between two visual styles (expanded or compact), or audio only.
+![alt text](image-10.png)
 
 ## Colourful visuals
 ![ColourfulPanels.png](ColourfulPanels.png)

@@ -260,6 +260,64 @@ public class PanelRecolorerTest
 		assertFalse(mask[4 * 10 + 2]);
 	}
 
+	@Test
+	public void legibleTextColourIsLeftAlone()
+	{
+		Color white = Color.WHITE;
+		assertEquals(white, PanelRecolorer.legibleOn(white, PanelRecolorer.deriveBackground(white, 60)));
+	}
+
+	@Test
+	public void darkTierColourIsLightenedKeepingHue()
+	{
+		Color purple = new Color(0x3C1450);
+		Color background = PanelRecolorer.deriveBackground(purple, 30);
+		Color name = PanelRecolorer.legibleOn(purple, background);
+		assertReadable(name, background);
+		float[] before = Color.RGBtoHSB(purple.getRed(), purple.getGreen(), purple.getBlue(), null);
+		float[] after = Color.RGBtoHSB(name.getRed(), name.getGreen(), name.getBlue(), null);
+		assertEquals(before[0], after[0], 0.01f);
+	}
+
+	@Test
+	public void blackTierColourBecomesReadable()
+	{
+		Color name = PanelRecolorer.legibleOn(Color.BLACK, PanelRecolorer.deriveBackground(Color.BLACK, 30));
+		assertReadable(name, Color.BLACK);
+	}
+
+	@Test
+	public void textIsNeverDarkened()
+	{
+		Color yellow = new Color(0xFFFF40);
+		assertEquals(Color.WHITE, PanelRecolorer.legibleOn(yellow, yellow));
+	}
+
+	/** White is the ceiling, so it only has to come close at the brightest allowed body. */
+	@Test
+	public void everyTierColourReadsAtEveryDarkness()
+	{
+		for (Object[] tier : TIERS)
+		{
+			Color tierColour = new Color((Integer) tier[3]);
+			for (int darkness = 10; darkness <= 60; darkness += 10)
+			{
+				Color background = PanelRecolorer.deriveBackground(tierColour, darkness);
+				Color name = PanelRecolorer.legibleOn(tierColour, background);
+				if (!name.equals(Color.WHITE))
+				{
+					assertReadable(name, background);
+				}
+			}
+		}
+	}
+
+	private static void assertReadable(Color text, Color background)
+	{
+		double contrast = PanelRecolorer.contrast(PanelRecolorer.luminance(text), PanelRecolorer.luminance(background));
+		assertTrue(text + " on " + background + " contrast " + contrast, contrast >= PanelRecolorer.MIN_TEXT_CONTRAST);
+	}
+
 	private static int alpha(BufferedImage image, int x, int y)
 	{
 		return (image.getRGB(x, y) >>> 24) & 0xFF;

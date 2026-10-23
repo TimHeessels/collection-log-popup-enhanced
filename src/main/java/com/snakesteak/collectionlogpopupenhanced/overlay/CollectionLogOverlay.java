@@ -13,6 +13,7 @@ import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
@@ -155,6 +156,17 @@ public class CollectionLogOverlay extends Overlay
 	private static final float COMPACT_STAT_LABEL_FONT_SIZE = 16f;
 	private static final int COMPACT_PROGRESS_BAR_HEIGHT = 4;
 
+	// Rarity effects start a beat after the icon pop - and never while a collection log screenshot
+	// could still be taken (see #effectsMayShow), so screenshots always show the clean panel.
+	static final long EFFECTS_START_MILLIS = FOLD_MILLIS + ICON_POP_MILLIS + 400;
+	private static final long EFFECTS_FADE_IN_MILLIS = 300;
+	// The Screenshot plugin captures the frame after the notification's open completes; this covers
+	// that frame even at a low frame rate.
+	static final long SCREENSHOT_GRACE_MILLIS = 500;
+	// A notification whose open never reports completing (e.g. the plugin was reloaded mid-open)
+	// stops holding the effects back after this.
+	static final long NATIVE_OPEN_TIMEOUT_MILLIS = 6000;
+
 	private static final float ICON_MIN_SCALE = 0.4f;
 	private static final float FOLD_OVERSHOOT = 1.0f;
 	private static final float ICON_POP_OVERSHOOT = 1.9f;
@@ -181,12 +193,20 @@ public class CollectionLogOverlay extends Overlay
 	// A step darker than the panel body: at the same shade the bar reads as a floating stripe rather
 	// than a fill inside a recess. Cached alongside the art - same inputs, and otherwise per-frame.
 	private final Map<RarityTier, Color> progressBarTrackColors = new EnumMap<>(RarityTier.class);
+	// The accent colour nudged until it reads against the panel body (see PanelRecolorer#legibleOn):
+	// a dark tier colour would otherwise draw the name barely brighter than the body it derives.
+	private final Map<RarityTier, Color> nameColors = new EnumMap<>(RarityTier.class);
 
 	// Only ever written/read from the client thread, so no synchronization is needed.
 	private final Deque<PendingItem> queue = new ArrayDeque<>();
 
 	private PendingItem current;
 	private long notificationStartMillis;
+	private final RarityEffects rarityEffects = new RarityEffects();
+	// When the game's notification began opening, or -1 when none is opening.
+	private long nativeOpeningSinceMillis = -1;
+	// Effects stay hidden until then - just past the last screenshot point.
+	private long effectsHeldUntilMillis;
 	// The centered location #render last set, to tell it apart from one the user dragged in.
 	private Point lastAutoLocation;
 
@@ -386,6 +406,7 @@ public class CollectionLogOverlay extends Overlay
 				iconFrames.put(tier, withOpacity(neutralIconFrames.get(tier), neutralIconFrames.get(tier)));
 				progressBarTrackColors.put(tier,
 					PanelRecolorer.deriveBackground(Color.WHITE, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
+				nameColors.put(tier, Color.WHITE);
 				continue;
 			}
 
@@ -397,6 +418,7 @@ public class CollectionLogOverlay extends Overlay
 			iconFrames.put(tier, withOpacity(frame, PanelRecolorer.recolor(frame, tier, border, background)));
 			progressBarTrackColors.put(tier,
 				PanelRecolorer.deriveBackground(border, Math.max(1, Math.round(darkness * PROGRESS_BAR_TRACK_DARKNESS_SCALE))));
+			nameColors.put(tier, PanelRecolorer.legibleOn(border, background));
 		}
 		for (RarityTier tier : RarityTier.values())
 		{
@@ -545,6 +567,35 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
+	 * Told when the game's own notification starts and finishes opening. The Screenshot plugin
+	 * captures as it finishes, so rarity effects are held back for the whole open plus a grace period.
+	 */
+	public void setNativeNotificationOpening(boolean opening)
+	{
+		long now = System.currentTimeMillis();
+		if (opening)
+		{
+			nativeOpeningSinceMillis = now;
+			return;
+		}
+		nativeOpeningSinceMillis = -1;
+		effectsHeldUntilMillis = Math.max(effectsHeldUntilMillis, now + SCREENSHOT_GRACE_MILLIS);
+	}
+
+	/**
+	 * @param elapsed               since the current popup started
+	 * @param nativeOpeningSince    when the game's notification began opening, or -1 if none is
+	 * @param heldUntil             the end of the last screenshot's grace period
+	 * @return whether rarity effects may draw: the popup fully open, plus a beat, and no screenshot
+	 *         that could still be taken
+	 */
+	static boolean effectsMayShow(long elapsed, long now, long nativeOpeningSince, long heldUntil)
+	{
+		boolean opening = nativeOpeningSince >= 0 && now - nativeOpeningSince < NATIVE_OPEN_TIMEOUT_MILLIS;
+		return elapsed >= EFFECTS_START_MILLIS && !opening && now >= heldUntil;
+	}
+
+	/**
 	 * @return true if nothing is currently showing or queued - used to drive the preview mode loop
 	 *         (see CollectionLogPopupEnhancedPlugin#onGameTick), which re-triggers a new random item
 	 *         each time the previous one finishes.
@@ -678,6 +729,12 @@ public class CollectionLogOverlay extends Overlay
 		graphics.setComposite(originalComposite);
 		graphics.setTransform(base);
 
+		RarityEffects.Frame effects = effectsFrame(now, elapsed, fadeAlpha);
+		if (effects != null)
+		{
+			rarityEffects.drawUnderIcon(graphics, effects);
+		}
+
 		// --- icon: independent pop, only once the fold has played out. Skipped entirely (not just
 		// alpha 0) when unresolved - an empty icon frame is worse than a text-only panel.
 		//
@@ -709,8 +766,81 @@ public class CollectionLogOverlay extends Overlay
 			graphics.setTransform(base);
 		}
 
-		// Extended's height includes the icon frame's bottom half, which straddles the panel's bottom edge.
-		return new Dimension(panelWidth, compact ? panelHeight : panelHeight + iconCanvasSize / 2);
+		if (effects != null)
+		{
+			rarityEffects.drawOverIcon(graphics, effects);
+		}
+
+		return new Dimension(panelWidth, totalHeight());
+	}
+
+	// Extended's height includes the icon frame's bottom half, which straddles the panel's bottom edge.
+	private int totalHeight()
+	{
+		return compact ? panelHeight : panelHeight + iconCanvasSize / 2;
+	}
+
+	/**
+	 * @return this frame's rarity effects, or null when there are none to draw: turned off, a tier
+	 *         without any, the popup still opening, or a screenshot that could still be taken
+	 */
+	private RarityEffects.Frame effectsFrame(long now, long elapsed, float fadeAlpha)
+	{
+		RarityTier tier = current.getTier();
+		if (!config.rarityEffects() || !RarityEffects.hasEffects(tier))
+		{
+			return null;
+		}
+		if (!effectsMayShow(elapsed, now, nativeOpeningSinceMillis, effectsHeldUntilMillis))
+		{
+			return null;
+		}
+
+		// Faded in from whichever came last: the effects' start, or the end of a screenshot hold.
+		long shownSince = Math.max(notificationStartMillis + EFFECTS_START_MILLIS, effectsHeldUntilMillis);
+		float fadeIn = clamp01((now - shownSince) / (float) EFFECTS_FADE_IN_MILLIS);
+		float scale = lastScalePercent / 100f;
+		return RarityEffects.Frame.builder()
+			.tier(tier)
+			.millis(elapsed - EFFECTS_START_MILLIS)
+			.alpha(fadeAlpha * foregroundOpacity * fadeIn)
+			.scale(scale)
+			.panelWidth(panelWidth)
+			.panelHeight(panelHeight)
+			.totalHeight(totalHeight())
+			.background((compact ? compactBackgrounds : backgrounds).get(tier))
+			.iconCenterX(iconX + iconCanvasSize / 2f)
+			.iconCenterY(iconY + iconCanvasSize / 2f)
+			.iconSize(iconCanvasSize)
+			.color(RarityEffects.effectColor(tierColor(tier), config.panelStyle() == PanelStyle.NEUTRAL))
+			.seed(current.getItemId() * 31L + notificationStartMillis)
+			.room(roomOnScreen(Math.round(RarityEffects.BASE_MAX_OVERFLOW * scale)))
+			.build();
+	}
+
+	/**
+	 * How far effects may spill past the panel on each side before leaving the screen, capped at
+	 * {@code max}. Taken from the panel's bounds as last laid out - it only moves when dragged.
+	 */
+	private Insets roomOnScreen(int max)
+	{
+		Rectangle bounds = getBounds();
+		int canvasWidth = client.getCanvasWidth();
+		int canvasHeight = client.getCanvasHeight();
+		if (bounds == null || canvasWidth <= 0 || canvasHeight <= 0)
+		{
+			return new Insets(0, 0, 0, 0);
+		}
+		return new Insets(
+			clampRoom(bounds.y, max),
+			clampRoom(bounds.x, max),
+			clampRoom(canvasHeight - (bounds.y + totalHeight()), max),
+			clampRoom(canvasWidth - (bounds.x + panelWidth), max));
+	}
+
+	private static int clampRoom(int room, int max)
+	{
+		return Math.max(0, Math.min(max, room));
 	}
 
 	private void drawItemSprite(Graphics2D graphics, BufferedImage sprite)
@@ -768,7 +898,7 @@ public class CollectionLogOverlay extends Overlay
 		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, maxNameWidth, nameFontMinSize);
 		graphics.setFont(fittedName.getFont());
 		int nameX = (panelWidth - graphics.getFontMetrics().stringWidth(fittedName.getText())) / 2;
-		drawOutlinedString(graphics, fittedName.getText(), nameX, nameBaselineY, accentColor(current.getTier()));
+		drawOutlinedString(graphics, fittedName.getText(), nameX, nameBaselineY, nameColors.get(current.getTier()));
 
 		drawProgressBar(graphics, original, fadeAlpha);
 
@@ -808,7 +938,7 @@ public class CollectionLogOverlay extends Overlay
 
 		FittedName fittedName = fitName(graphics, current.getItemName(), nameFont, textMaxWidth, nameFontMinSize);
 		graphics.setFont(fittedName.getFont());
-		drawOutlinedString(graphics, fittedName.getText(), textX, nameBaselineY, accentColor(tier));
+		drawOutlinedString(graphics, fittedName.getText(), textX, nameBaselineY, nameColors.get(tier));
 
 		drawCompactStats(graphics, textRight);
 
@@ -1048,6 +1178,8 @@ public class CollectionLogOverlay extends Overlay
 			{
 				releasedFullyOpenListener.accept(current.getItemName());
 			}
+			// The listener may have just requested a screenshot of the next frame.
+			effectsHeldUntilMillis = Math.max(effectsHeldUntilMillis, now + SCREENSHOT_GRACE_MILLIS);
 		}
 
 		if (config.previewTier() != PreviewTier.NONE)
@@ -1291,7 +1423,8 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * The item name and progress fill colour: the tier colour, or plain white on the neutral style.
+	 * The progress fill colour: the tier colour, or plain white on the neutral style. The item name
+	 * starts from the same colour but is contrast-adjusted (see #nameColors).
 	 */
 	private Color accentColor(RarityTier tier)
 	{
@@ -1299,8 +1432,8 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * The configured colour for {@code tier}: the colourful panel art, and via #accentColor the name
-	 * and progress fill, so they always read as the same tier.
+	 * The configured colour for {@code tier}: the colourful panel art, and via #accentColor the progress
+	 * fill and (contrast-adjusted) name, so they always read as the same tier.
 	 */
 	private Color tierColor(RarityTier tier)
 	{

@@ -10,6 +10,7 @@ Displays a popup and (optional) sound effect based on rarity on new collection l
 - [Rarity tiers](#rarity-tiers)
 - [Appearance](#appearance)
   - [Scaling](#scaling)
+  - [Rarity effects](#rarity-effects)
   - [Colors](#colors)
 - [Statistics](#statistics)
 - [Audio](#audio)
@@ -76,6 +77,9 @@ The native popup is hidden for any clog unlocked so only the enhanced panel show
 The center bar depicts your progress towards collecting all collection log items.
 
 ![alt text](appearance_settings.png)
+
+## Rarity effects
+Adds some extra flair to collection log unlocks
 
 ## Colors
 You can customize the panel's colours here (Active only on colourful mode).

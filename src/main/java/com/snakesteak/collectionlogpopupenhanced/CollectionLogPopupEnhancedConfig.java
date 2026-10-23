@@ -379,6 +379,18 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "rarityEffects",
+		name = "Rarity effects",
+		description = "Adds effects that get bigger the rarer the unlock - none for common, the works for pets. They start after the screenshot is taken.",
+		position = 6,
+		section = appearanceSection
+	)
+	default boolean rarityEffects()
+	{
+		return false;
+	}
+
+	@ConfigItem(
 		keyName = "panelStyle",
 		name = "Panel style",
 		description = "Colourful tints the panel with the tier colour, neutral keeps the plain OSRS-style art, audio only keeps the game's own popup and just plays the sound",

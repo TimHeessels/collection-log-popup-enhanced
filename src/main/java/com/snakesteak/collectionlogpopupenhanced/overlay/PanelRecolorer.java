@@ -49,6 +49,15 @@ final class PanelRecolorer
 	private static final float BACKGROUND_SATURATION_SCALE = 0.9f;
 
 	/**
+	 * Minimum contrast between the item name and the panel body (WCAG large-text level; the name is
+	 * big and black-outlined).
+	 */
+	static final double MIN_TEXT_CONTRAST = 3.0;
+
+	/** HSB step used when nudging a colour towards {@link #MIN_TEXT_CONTRAST}. */
+	private static final float LEGIBILITY_STEP = 0.02f;
+
+	/**
 	 * Per-tier reference shades measured from the bundled art, used to work out how far each pixel
 	 * deviates from its family's base shade so that deviation can be reproduced against the user's
 	 * chosen color.
@@ -85,6 +94,63 @@ final class PanelRecolorer
 		float brightness = Math.min(1f, hsb[2] * (darknessPercent / 100f));
 		float saturation = Math.min(1f, hsb[1] * BACKGROUND_SATURATION_SCALE);
 		return new Color(Color.HSBtoRGB(hsb[0], saturation, brightness));
+	}
+
+	/**
+	 * Returns {@code text} if it already reads against {@code background}, otherwise the nearest
+	 * shade of the same hue that does: brighter, then washed towards white. Never darker - the name
+	 * is black-outlined, so dark text loses its edge, and the darkness cap keeps the body dim enough
+	 * that white always reads.
+	 */
+	static Color legibleOn(Color text, Color background)
+	{
+		double backgroundLuminance = luminance(background);
+		if (contrast(luminance(text), backgroundLuminance) >= MIN_TEXT_CONTRAST)
+		{
+			return text;
+		}
+
+		float[] hsb = toHsb(text);
+		float brightness = hsb[2];
+		float saturation = hsb[1];
+		while (true)
+		{
+			if (brightness < 1f)
+			{
+				brightness = Math.min(1f, brightness + LEGIBILITY_STEP);
+			}
+			else if (saturation > 0f)
+			{
+				saturation = Math.max(0f, saturation - LEGIBILITY_STEP);
+			}
+			else
+			{
+				return Color.WHITE;
+			}
+			Color candidate = new Color(Color.HSBtoRGB(hsb[0], saturation, brightness));
+			if (contrast(luminance(candidate), backgroundLuminance) >= MIN_TEXT_CONTRAST)
+			{
+				return candidate;
+			}
+		}
+	}
+
+	/** WCAG contrast ratio between two relative luminances, always >= 1. */
+	static double contrast(double a, double b)
+	{
+		return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+	}
+
+	/** WCAG relative luminance of an sRGB colour. */
+	static double luminance(Color color)
+	{
+		return 0.2126 * linear(color.getRed()) + 0.7152 * linear(color.getGreen()) + 0.0722 * linear(color.getBlue());
+	}
+
+	private static double linear(int channel)
+	{
+		double c = channel / 255.0;
+		return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 	}
 
 	/**

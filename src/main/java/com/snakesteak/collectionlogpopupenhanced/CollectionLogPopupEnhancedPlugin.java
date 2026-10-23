@@ -290,14 +290,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Subscribe(priority = 1)
 	public void onScriptPreFired(ScriptPreFired scriptPreFired)
 	{
-		// Any notification, not just collection log ones - its title may not be set yet here, and
-		// holding the rarity effects back for an unrelated one costs nothing.
-		if (scriptPreFired.getScriptId() == ScriptID.NOTIFICATION_START)
-		{
-			collectionLogOverlay.setNativeNotificationOpening(true);
-			return;
-		}
-
 		if (scriptPreFired.getScriptId() != ScriptID.NOTIFICATION_DELAY || spoofedNotificationTitle != null
 			|| !isHeldCoxNotification())
 		{
@@ -314,8 +306,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if (scriptPostFired.getScriptId() == ScriptID.NOTIFICATION_DELAY)
 		{
 			restoreNotificationTitle();
-			// The Screenshot plugin has just asked for its capture, so effects wait out the grace period.
-			collectionLogOverlay.setNativeNotificationOpening(false);
 		}
 	}
 

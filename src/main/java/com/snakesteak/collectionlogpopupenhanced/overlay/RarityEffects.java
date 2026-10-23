@@ -7,7 +7,6 @@ import java.awt.Color;
 import java.awt.Composite;
 import java.awt.Graphics2D;
 import java.awt.Insets;
-import java.awt.LinearGradientPaint;
 import java.awt.Paint;
 import java.awt.RadialGradientPaint;
 import java.awt.RenderingHints;
@@ -17,7 +16,6 @@ import java.awt.geom.Path2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.awt.geom.RoundRectangle2D;
-import java.awt.image.BufferedImage;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Random;
@@ -25,19 +23,20 @@ import lombok.Builder;
 import lombok.Value;
 
 /**
- * The optional "Rarity effects": a shine sweep, icon halo, sparkles, a burst and an edge glow, each
- * tier adding to the one below (see {@link Profile}). Only drawn once the popup is fully open and the
- * screenshot has been taken - the overlay decides when (see CollectionLogOverlay#effectsFrame).
+ * The optional "Rarity effects": icon twinkles, icon halo, sparkles, a burst and an edge glow, each
+ * tier adding to the one below (see {@link Profile}). The overlay decides when they start (see
+ * CollectionLogOverlay#effectsFrame).
  *
  * <p>Everything is drawn in the panel's own coordinates, top-left at 0,0. The timing maths lives in
  * static helpers so it can be tested without a Graphics.
  */
 class RarityEffects
 {
-	private static final long SWEEP_MILLIS = 700;
 	private static final long HALO_PULSE_MILLIS = 1200;
 	private static final long EDGE_PULSE_MILLIS = 1400;
 	private static final long RAINBOW_MILLIS = 2500;
+	// Holds the burst until after the screenshot (~400 ms into the effects), so it never covers the icon in it.
+	static final long BURST_DELAY_MILLIS = 700;
 	// How far, at 100% scale, anything may spill past the panel - further still limited by the room on screen.
 	static final int BASE_MAX_OVERFLOW = 60;
 
@@ -47,15 +46,12 @@ class RarityEffects
 
 	static
 	{
-		PROFILES.put(RarityTier.COMMON, new Profile(0, 0f, false, 0, 0, false, false));
-		PROFILES.put(RarityTier.UNCOMMON, new Profile(Profile.ONCE, 0.35f, false, 0, 0, false, false));
-		PROFILES.put(RarityTier.RARE, new Profile(3000, 0.45f, true, 0, 0, false, false));
-		PROFILES.put(RarityTier.VERY_RARE, new Profile(2000, 0.6f, true, 8, 0, false, false));
-		PROFILES.put(RarityTier.PET, new Profile(1600, 0.7f, true, 20, 28, true, true));
+		PROFILES.put(RarityTier.COMMON, new Profile(0, false, 0, 0, false, false));
+		PROFILES.put(RarityTier.UNCOMMON, new Profile(3, false, 0, 0, false, false));
+		PROFILES.put(RarityTier.RARE, new Profile(3, true, 0, 0, false, false));
+		PROFILES.put(RarityTier.VERY_RARE, new Profile(3, true, 8, 0, false, false));
+		PROFILES.put(RarityTier.PET, new Profile(3, true, 20, 28, true, true));
 	}
-
-	// Reused frame to frame for the shine, which has to be masked to the panel art's shape.
-	private BufferedImage scratch;
 
 	/**
 	 * What each tier gets. Every field only ever grows tier to tier, so a rarer unlock never has less.
@@ -63,26 +59,16 @@ class RarityEffects
 	@Value
 	static class Profile
 	{
-		// Shine sweeps once and never repeats.
-		static final long ONCE = Long.MAX_VALUE;
-
-		// 0 = no shine.
-		long sweepCycleMillis;
-		float shineAlpha;
+		int twinkles;
 		boolean halo;
 		int sparkles;
 		int burstParticles;
 		boolean edgeGlow;
 		boolean rainbow;
 
-		boolean hasShine()
-		{
-			return sweepCycleMillis > 0;
-		}
-
 		boolean hasAny()
 		{
-			return hasShine() || halo || sparkles > 0 || burstParticles > 0 || edgeGlow;
+			return twinkles > 0 || halo || sparkles > 0 || burstParticles > 0 || edgeGlow;
 		}
 	}
 
@@ -101,7 +87,6 @@ class RarityEffects
 		int panelHeight;
 		// Panel plus whatever hangs below it (the extended icon frame's bottom half).
 		int totalHeight;
-		BufferedImage background;
 		float iconCenterX;
 		float iconCenterY;
 		int iconSize;
@@ -147,16 +132,54 @@ class RarityEffects
 	}
 
 	/**
-	 * @return how far the shine band is across the panel, 0-1, or -1 while no sweep is running
+	 * A sparkle twinkling somewhere along the icon frame, just inside or outside its edge. Like
+	 * {@link #sparkle}, each lives ~1-1.6 s and reappears elsewhere, fixed by {@code seed}.
+	 *
+	 * @return null between twinkles
 	 */
-	static float sweepProgress(long millis, Profile profile)
+	static Particle twinkle(long seed, int index, long millis, float centerX, float centerY, int iconSize, float scale)
 	{
-		if (!profile.hasShine() || millis < 0)
+		// Negative salts keep these clear of the sparkles' and the burst's streams.
+		Random timing = new Random(mix(seed, index, -2));
+		long lifetime = 1000 + timing.nextInt(600);
+		long offset = timing.nextInt((int) lifetime);
+		long cycle = (millis + offset) / lifetime;
+		float u = ((millis + offset) % lifetime) / (float) lifetime;
+		float twinkle = (float) Math.sin(Math.PI * u);
+		if (twinkle <= 0.01f)
 		{
-			return -1f;
+			return null;
 		}
-		long phase = profile.getSweepCycleMillis() == Profile.ONCE ? millis : millis % profile.getSweepCycleMillis();
-		return phase < SWEEP_MILLIS ? phase / (float) SWEEP_MILLIS : -1f;
+
+		Random place = new Random(mix(seed, index, -3 - cycle));
+		float half = iconSize / 2f;
+		float along = place.nextFloat() * 4;
+		float edge = half + (place.nextFloat() * 10 - 4) * scale;
+		float f = along % 1;
+		float x;
+		float y;
+		if (along < 1)
+		{
+			x = centerX - half + f * iconSize;
+			y = centerY - edge;
+		}
+		else if (along < 2)
+		{
+			x = centerX + edge;
+			y = centerY - half + f * iconSize;
+		}
+		else if (along < 3)
+		{
+			x = centerX + half - f * iconSize;
+			y = centerY + edge;
+		}
+		else
+		{
+			x = centerX - edge;
+			y = centerY + half - f * iconSize;
+		}
+		float size = (4 + place.nextFloat() * 4) * 0.9f * scale * twinkle;
+		return new Particle(x, y, size, twinkle, u * 0.8f, place.nextFloat());
 	}
 
 	/**
@@ -221,7 +244,7 @@ class RarityEffects
 		double angle = random.nextDouble() * 2 * Math.PI;
 		float distance = (50 + random.nextFloat() * 70) * scale;
 		long lifetime = 1100 + random.nextInt(700);
-		long delay = random.nextInt(150);
+		long delay = BURST_DELAY_MILLIS + random.nextInt(150);
 		float size = (4 + random.nextFloat() * 4) * scale;
 		float spin = (random.nextFloat() * 2 - 1) * 6;
 		float hue = random.nextFloat();
@@ -255,7 +278,7 @@ class RarityEffects
 		return new Particle(x, y, size * (1 - u * 0.5f), 1 - u * u, spin * u, hue);
 	}
 
-	/** Edge glow, shine and halo - everything that sits beneath the icon. */
+	/** Edge glow and halo - everything that sits beneath the icon. */
 	void drawUnderIcon(Graphics2D graphics, Frame frame)
 	{
 		Profile profile = profile(frame.getTier());
@@ -270,11 +293,6 @@ class RarityEffects
 			{
 				drawEdgeGlow(graphics, frame, profile);
 			}
-			float sweep = sweepProgress(frame.getMillis(), profile);
-			if (sweep >= 0f)
-			{
-				drawShine(graphics, frame, profile, sweep);
-			}
 			if (profile.isHalo())
 			{
 				drawHalo(graphics, frame, profile);
@@ -286,11 +304,11 @@ class RarityEffects
 		}
 	}
 
-	/** Sparkles and the burst - drawn over the icon. */
+	/** Twinkles, sparkles and the burst - drawn over the icon. */
 	void drawOverIcon(Graphics2D graphics, Frame frame)
 	{
 		Profile profile = profile(frame.getTier());
-		if (profile.getSparkles() == 0 && profile.getBurstParticles() == 0)
+		if (profile.getTwinkles() == 0 && profile.getSparkles() == 0 && profile.getBurstParticles() == 0)
 		{
 			return;
 		}
@@ -301,6 +319,15 @@ class RarityEffects
 		graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		try
 		{
+			for (int i = 0; i < profile.getTwinkles(); i++)
+			{
+				Particle twinkle = twinkle(frame.getSeed(), i, frame.getMillis(), frame.getIconCenterX(),
+					frame.getIconCenterY(), frame.getIconSize(), frame.getScale());
+				if (twinkle != null)
+				{
+					drawStar(graphics, twinkle, particleColor(frame, profile, twinkle.getHue()), frame.getAlpha() * 0.9f);
+				}
+			}
 			for (int i = 0; i < profile.getSparkles(); i++)
 			{
 				Particle sparkle = sparkle(frame.getSeed(), i, frame.getMillis(), frame.getPanelWidth(),
@@ -334,44 +361,6 @@ class RarityEffects
 		{
 			restore(graphics, composite, paint, stroke, antialias);
 		}
-	}
-
-	private void drawShine(Graphics2D graphics, Frame frame, Profile profile, float sweep)
-	{
-		int width = frame.getPanelWidth();
-		int height = frame.getPanelHeight();
-		if (scratch == null || scratch.getWidth() != width || scratch.getHeight() != height)
-		{
-			scratch = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
-		}
-
-		float band = width * 0.35f;
-		float x = -band + sweep * (width + band);
-		Color color = cycleColor(frame, profile, 0f);
-		Color clear = withAlpha(color, 0);
-
-		Graphics2D buffer = scratch.createGraphics();
-		try
-		{
-			buffer.setComposite(AlphaComposite.Clear);
-			buffer.fillRect(0, 0, width, height);
-			buffer.setComposite(AlphaComposite.SrcOver);
-			buffer.setPaint(new LinearGradientPaint(
-				new Point2D.Float(x, 0), new Point2D.Float(x + band, band * 0.5f),
-				new float[]{0f, 0.5f, 1f},
-				new Color[]{clear, withAlpha(color, 255), clear}));
-			buffer.fillRect(0, 0, width, height);
-			// Keeps the band only where the panel art is, so it never paints past the frame.
-			buffer.setComposite(AlphaComposite.DstIn);
-			buffer.drawImage(frame.getBackground(), 0, 0, width, height, null);
-		}
-		finally
-		{
-			buffer.dispose();
-		}
-
-		graphics.setComposite(alpha(profile.getShineAlpha() * frame.getAlpha()));
-		graphics.drawImage(scratch, 0, 0, null);
 	}
 
 	private static void drawHalo(Graphics2D graphics, Frame frame, Profile profile)

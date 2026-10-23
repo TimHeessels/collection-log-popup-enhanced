@@ -381,7 +381,7 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	@ConfigItem(
 		keyName = "rarityEffects",
 		name = "Rarity effects",
-		description = "Adds effects that get bigger the rarer the unlock - none for common, the works for pets. They start after the screenshot is taken.",
+		description = "Adds effects that get bigger the rarer the unlock - none for common, the works for pets.",
 		position = 6,
 		section = appearanceSection
 	)

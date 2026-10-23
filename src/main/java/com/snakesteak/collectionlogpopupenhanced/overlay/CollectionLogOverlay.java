@@ -156,16 +156,9 @@ public class CollectionLogOverlay extends Overlay
 	private static final float COMPACT_STAT_LABEL_FONT_SIZE = 16f;
 	private static final int COMPACT_PROGRESS_BAR_HEIGHT = 4;
 
-	// Rarity effects start a beat after the icon pop - and never while a collection log screenshot
-	// could still be taken (see #effectsMayShow), so screenshots always show the clean panel.
-	static final long EFFECTS_START_MILLIS = FOLD_MILLIS + ICON_POP_MILLIS + 400;
+	// Rarity effects start with the icon pop, fully faded in before the screenshot at the end of the open.
+	static final long EFFECTS_START_MILLIS = FOLD_MILLIS;
 	private static final long EFFECTS_FADE_IN_MILLIS = 300;
-	// The Screenshot plugin captures the frame after the notification's open completes; this covers
-	// that frame even at a low frame rate.
-	static final long SCREENSHOT_GRACE_MILLIS = 500;
-	// A notification whose open never reports completing (e.g. the plugin was reloaded mid-open)
-	// stops holding the effects back after this.
-	static final long NATIVE_OPEN_TIMEOUT_MILLIS = 6000;
 
 	private static final float ICON_MIN_SCALE = 0.4f;
 	private static final float FOLD_OVERSHOOT = 1.0f;
@@ -203,10 +196,6 @@ public class CollectionLogOverlay extends Overlay
 	private PendingItem current;
 	private long notificationStartMillis;
 	private final RarityEffects rarityEffects = new RarityEffects();
-	// When the game's notification began opening, or -1 when none is opening.
-	private long nativeOpeningSinceMillis = -1;
-	// Effects stay hidden until then - just past the last screenshot point.
-	private long effectsHeldUntilMillis;
 	// The centered location #render last set, to tell it apart from one the user dragged in.
 	private Point lastAutoLocation;
 
@@ -567,35 +556,6 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * Told when the game's own notification starts and finishes opening. The Screenshot plugin
-	 * captures as it finishes, so rarity effects are held back for the whole open plus a grace period.
-	 */
-	public void setNativeNotificationOpening(boolean opening)
-	{
-		long now = System.currentTimeMillis();
-		if (opening)
-		{
-			nativeOpeningSinceMillis = now;
-			return;
-		}
-		nativeOpeningSinceMillis = -1;
-		effectsHeldUntilMillis = Math.max(effectsHeldUntilMillis, now + SCREENSHOT_GRACE_MILLIS);
-	}
-
-	/**
-	 * @param elapsed               since the current popup started
-	 * @param nativeOpeningSince    when the game's notification began opening, or -1 if none is
-	 * @param heldUntil             the end of the last screenshot's grace period
-	 * @return whether rarity effects may draw: the popup fully open, plus a beat, and no screenshot
-	 *         that could still be taken
-	 */
-	static boolean effectsMayShow(long elapsed, long now, long nativeOpeningSince, long heldUntil)
-	{
-		boolean opening = nativeOpeningSince >= 0 && now - nativeOpeningSince < NATIVE_OPEN_TIMEOUT_MILLIS;
-		return elapsed >= EFFECTS_START_MILLIS && !opening && now >= heldUntil;
-	}
-
-	/**
 	 * @return true if nothing is currently showing or queued - used to drive the preview mode loop
 	 *         (see CollectionLogPopupEnhancedPlugin#onGameTick), which re-triggers a new random item
 	 *         each time the previous one finishes.
@@ -782,23 +742,17 @@ public class CollectionLogOverlay extends Overlay
 
 	/**
 	 * @return this frame's rarity effects, or null when there are none to draw: turned off, a tier
-	 *         without any, the popup still opening, or a screenshot that could still be taken
+	 *         without any, or the icon not popping in yet
 	 */
 	private RarityEffects.Frame effectsFrame(long now, long elapsed, float fadeAlpha)
 	{
 		RarityTier tier = current.getTier();
-		if (!config.rarityEffects() || !RarityEffects.hasEffects(tier))
-		{
-			return null;
-		}
-		if (!effectsMayShow(elapsed, now, nativeOpeningSinceMillis, effectsHeldUntilMillis))
+		if (!config.rarityEffects() || !RarityEffects.hasEffects(tier) || elapsed < EFFECTS_START_MILLIS)
 		{
 			return null;
 		}
 
-		// Faded in from whichever came last: the effects' start, or the end of a screenshot hold.
-		long shownSince = Math.max(notificationStartMillis + EFFECTS_START_MILLIS, effectsHeldUntilMillis);
-		float fadeIn = clamp01((now - shownSince) / (float) EFFECTS_FADE_IN_MILLIS);
+		float fadeIn = clamp01((elapsed - EFFECTS_START_MILLIS) / (float) EFFECTS_FADE_IN_MILLIS);
 		float scale = lastScalePercent / 100f;
 		return RarityEffects.Frame.builder()
 			.tier(tier)
@@ -808,7 +762,6 @@ public class CollectionLogOverlay extends Overlay
 			.panelWidth(panelWidth)
 			.panelHeight(panelHeight)
 			.totalHeight(totalHeight())
-			.background((compact ? compactBackgrounds : backgrounds).get(tier))
 			.iconCenterX(iconX + iconCanvasSize / 2f)
 			.iconCenterY(iconY + iconCanvasSize / 2f)
 			.iconSize(iconCanvasSize)
@@ -1178,8 +1131,6 @@ public class CollectionLogOverlay extends Overlay
 			{
 				releasedFullyOpenListener.accept(current.getItemName());
 			}
-			// The listener may have just requested a screenshot of the next frame.
-			effectsHeldUntilMillis = Math.max(effectsHeldUntilMillis, now + SCREENSHOT_GRACE_MILLIS);
 		}
 
 		if (config.previewTier() != PreviewTier.NONE)

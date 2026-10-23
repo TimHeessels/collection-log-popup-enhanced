@@ -7,8 +7,6 @@ import java.awt.Insets;
 import java.awt.image.BufferedImage;
 import org.junit.Test;
 
-import static com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay.EFFECTS_START_MILLIS;
-import static com.snakesteak.collectionlogpopupenhanced.overlay.CollectionLogOverlay.NATIVE_OPEN_TIMEOUT_MILLIS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -17,7 +15,8 @@ public class RarityEffectsTest
 {
 	private static final int WIDTH = 379;
 	private static final int HEIGHT = 128;
-	private static final int TOTAL_HEIGHT = HEIGHT + 44;
+	private static final int ICON = 89;
+	private static final int TOTAL_HEIGHT = HEIGHT + ICON / 2;
 	private static final Insets NO_ROOM = new Insets(0, 0, 0, 0);
 	private static final Insets ROOM = new Insets(60, 60, 60, 60);
 
@@ -37,10 +36,7 @@ public class RarityEffectsTest
 			RarityEffects.Profile higher = RarityEffects.profile(tiers[i]);
 			String pair = tiers[i - 1] + " -> " + tiers[i];
 			assertTrue(pair, RarityEffects.hasEffects(tiers[i]));
-			assertTrue(pair, !lower.hasShine() || higher.hasShine());
-			// A shorter cycle is a more frequent shine; ONCE is the longest possible.
-			assertTrue(pair, !lower.hasShine() || higher.getSweepCycleMillis() <= lower.getSweepCycleMillis());
-			assertTrue(pair, higher.getShineAlpha() >= lower.getShineAlpha());
+			assertTrue(pair, higher.getTwinkles() >= lower.getTwinkles());
 			assertTrue(pair, !lower.isHalo() || higher.isHalo());
 			assertTrue(pair, higher.getSparkles() >= lower.getSparkles());
 			assertTrue(pair, higher.getBurstParticles() >= lower.getBurstParticles());
@@ -49,27 +45,46 @@ public class RarityEffectsTest
 	}
 
 	@Test
-	public void uncommonShinesOnce()
+	public void twinklesAreStableForASeed()
 	{
-		RarityEffects.Profile uncommon = RarityEffects.profile(RarityTier.UNCOMMON);
-		assertEquals(-1f, RarityEffects.sweepProgress(-1, uncommon), 0f);
-		assertEquals(0f, RarityEffects.sweepProgress(0, uncommon), 0f);
-		assertEquals(0.5f, RarityEffects.sweepProgress(350, uncommon), 0.001f);
-		assertEquals(-1f, RarityEffects.sweepProgress(10_000, uncommon), 0f);
+		for (int i = 0; i < 3; i++)
+		{
+			assertEquals(RarityEffects.twinkle(42, i, 1234, WIDTH / 2f, HEIGHT, ICON, 1f),
+				RarityEffects.twinkle(42, i, 1234, WIDTH / 2f, HEIGHT, ICON, 1f));
+		}
 	}
 
 	@Test
-	public void rareShineRepeats()
+	public void twinklesStayOnTheIconFrame()
 	{
-		RarityEffects.Profile rare = RarityEffects.profile(RarityTier.RARE);
-		long cycle = rare.getSweepCycleMillis();
-		assertEquals(-1f, RarityEffects.sweepProgress(cycle - 1, rare), 0f);
-		assertEquals(RarityEffects.sweepProgress(100, rare), RarityEffects.sweepProgress(cycle * 3 + 100, rare), 0f);
-		for (long t = 0; t < cycle * 2; t += 37)
+		float centerX = WIDTH / 2f;
+		float centerY = HEIGHT;
+		float half = ICON / 2f;
+		int drawn = 0;
+		int belowCenter = 0;
+		for (long seed = 0; seed < 20; seed++)
 		{
-			float progress = RarityEffects.sweepProgress(t, rare);
-			assertTrue(progress == -1f || (progress >= 0f && progress <= 1f));
+			for (long t = 0; t < 5000; t += 40)
+			{
+				for (int i = 0; i < 3; i++)
+				{
+					RarityEffects.Particle twinkle = RarityEffects.twinkle(seed, i, t, centerX, centerY, ICON, 1f);
+					if (twinkle != null)
+					{
+						drawn++;
+						// The frame's edge, give or take the 4px in / 6px out each twinkle may sit.
+						assertTrue(twinkle.getX() >= centerX - half - 6 && twinkle.getX() <= centerX + half + 6);
+						assertTrue(twinkle.getY() >= centerY - half - 6 && twinkle.getY() <= centerY + half + 6);
+						if (twinkle.getY() > centerY)
+						{
+							belowCenter++;
+						}
+					}
+				}
+			}
 		}
+		assertTrue("twinkles should actually show", drawn > 0);
+		assertTrue("twinkles should reach the bottom half too", belowCenter > 0);
 	}
 
 	@Test
@@ -126,6 +141,18 @@ public class RarityEffectsTest
 	}
 
 	@Test
+	public void burstWaitsUntilAfterTheScreenshot()
+	{
+		for (long t = 0; t <= RarityEffects.BURST_DELAY_MILLIS; t += 25)
+		{
+			for (int i = 0; i < 28; i++)
+			{
+				assertEquals(null, RarityEffects.burstParticle(1, i, t, 0, 0, WIDTH, TOTAL_HEIGHT, ROOM, 1f));
+			}
+		}
+	}
+
+	@Test
 	public void burstPlaysOnceThenEnds()
 	{
 		for (int i = 0; i < 28; i++)
@@ -135,34 +162,8 @@ public class RarityEffectsTest
 	}
 
 	@Test
-	public void effectsWaitForTheIconPop()
-	{
-		assertFalse(CollectionLogOverlay.effectsMayShow(EFFECTS_START_MILLIS - 1, 10_000, -1, 0));
-		assertTrue(CollectionLogOverlay.effectsMayShow(EFFECTS_START_MILLIS, 10_000, -1, 0));
-	}
-
-	@Test
-	public void effectsWaitForTheScreenshot()
-	{
-		long now = 10_000;
-		// Game notification still opening: the screenshot hasn't been taken yet.
-		assertFalse(CollectionLogOverlay.effectsMayShow(5000, now, now - 1000, 0));
-		// Opened, but still inside the grace period after it.
-		assertFalse(CollectionLogOverlay.effectsMayShow(5000, now, -1, now + 1));
-		assertTrue(CollectionLogOverlay.effectsMayShow(5000, now, -1, now));
-	}
-
-	@Test
-	public void aNotificationThatNeverFinishesOpeningStopsHoldingEffects()
-	{
-		long now = 20_000;
-		assertTrue(CollectionLogOverlay.effectsMayShow(5000, now, now - NATIVE_OPEN_TIMEOUT_MILLIS, 0));
-	}
-
-	@Test
 	public void drawsEveryTierWithoutError()
 	{
-		BufferedImage background = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_ARGB);
 		BufferedImage canvas = new BufferedImage(WIDTH + 120, TOTAL_HEIGHT + 120, BufferedImage.TYPE_INT_ARGB);
 		RarityEffects effects = new RarityEffects();
 		for (RarityTier tier : RarityTier.values())
@@ -172,7 +173,6 @@ public class RarityEffectsTest
 				RarityEffects.Frame frame = RarityEffects.Frame.builder()
 					.tier(tier).millis(t).alpha(1f).scale(1f)
 					.panelWidth(WIDTH).panelHeight(HEIGHT).totalHeight(TOTAL_HEIGHT)
-					.background(background)
 					.iconCenterX(WIDTH / 2f).iconCenterY(HEIGHT).iconSize(89)
 					.color(RarityEffects.effectColor(Color.MAGENTA, false))
 					.seed(123).room(ROOM)

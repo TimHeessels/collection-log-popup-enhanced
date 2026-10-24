@@ -55,6 +55,7 @@ public class CollectionLogOverlayIconTest
 		when(config.overlayDisplaySeconds()).thenReturn(5);
 		when(config.backgroundDarkness()).thenReturn(50);
 		when(config.panelStyle()).thenReturn(PanelStyle.COLORFUL);
+		when(config.rarityEffects()).thenReturn(RarityEffectsLevel.OFF);
 		when(config.previewTier()).thenReturn(PreviewTier.NONE);
 		when(config.textRenderMode()).thenReturn(TextRenderMode.SMOOTH);
 		when(config.leftPanelStat()).thenReturn(LeftPanelStat.KILL_COUNT);

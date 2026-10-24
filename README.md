@@ -79,7 +79,9 @@ The center bar depicts your progress towards collecting all collection log items
 ![alt text](appearance_settings.png)
 
 ## Rarity effects
-Adds some extra flair to collection log unlocks
+Adds some extra flair to collection log unlocks (only for colorful theme)
+
+![alt text](image-6.png)
 
 ## Colors
 You can customize the panel's colours here (Active only on colourful mode).

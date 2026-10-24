@@ -741,13 +741,15 @@ public class CollectionLogOverlay extends Overlay
 	}
 
 	/**
-	 * @return this frame's rarity effects, or null when there are none to draw: turned off, a tier
-	 *         without any, or the icon not popping in yet
+	 * @return this frame's rarity effects, or null when there are none to draw: turned off, not the
+	 *         colourful style, a tier without any, or the icon not popping in yet
 	 */
 	private RarityEffects.Frame effectsFrame(long now, long elapsed, float fadeAlpha)
 	{
 		RarityTier tier = current.getTier();
-		if (!config.rarityEffects() || !RarityEffects.hasEffects(tier) || elapsed < EFFECTS_START_MILLIS)
+		RarityEffectsLevel level = config.rarityEffects();
+		if (config.panelStyle() != PanelStyle.COLORFUL || !RarityEffects.hasEffects(tier, level)
+			|| elapsed < EFFECTS_START_MILLIS)
 		{
 			return null;
 		}
@@ -756,8 +758,9 @@ public class CollectionLogOverlay extends Overlay
 		float scale = lastScalePercent / 100f;
 		return RarityEffects.Frame.builder()
 			.tier(tier)
+			.level(level)
 			.millis(elapsed - EFFECTS_START_MILLIS)
-			.alpha(fadeAlpha * foregroundOpacity * fadeIn)
+			.alpha(fadeAlpha * foregroundOpacity * fadeIn * level.getIntensity())
 			.scale(scale)
 			.panelWidth(panelWidth)
 			.panelHeight(panelHeight)
@@ -765,7 +768,7 @@ public class CollectionLogOverlay extends Overlay
 			.iconCenterX(iconX + iconCanvasSize / 2f)
 			.iconCenterY(iconY + iconCanvasSize / 2f)
 			.iconSize(iconCanvasSize)
-			.color(RarityEffects.effectColor(tierColor(tier), config.panelStyle() == PanelStyle.NEUTRAL))
+			.color(RarityEffects.effectColor(tierColor(tier)))
 			.seed(current.getItemId() * 31L + notificationStartMillis)
 			.room(roomOnScreen(Math.round(RarityEffects.BASE_MAX_OVERFLOW * scale)))
 			.build();

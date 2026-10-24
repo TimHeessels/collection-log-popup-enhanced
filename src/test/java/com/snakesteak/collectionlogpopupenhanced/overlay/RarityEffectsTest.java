@@ -23,25 +23,54 @@ public class RarityEffectsTest
 	@Test
 	public void commonHasNoEffects()
 	{
-		assertFalse(RarityEffects.hasEffects(RarityTier.COMMON));
+		for (RarityEffectsLevel level : RarityEffectsLevel.values())
+		{
+			assertFalse(RarityEffects.hasEffects(RarityTier.COMMON, level));
+		}
+	}
+
+	@Test
+	public void offHasNoEffects()
+	{
+		for (RarityTier tier : RarityTier.values())
+		{
+			assertFalse(RarityEffects.hasEffects(tier, RarityEffectsLevel.OFF));
+		}
 	}
 
 	@Test
 	public void eachTierHasAtLeastWhatTheOneBelowHas()
 	{
 		RarityTier[] tiers = RarityTier.values();
-		for (int i = 1; i < tiers.length; i++)
+		for (RarityEffectsLevel level : new RarityEffectsLevel[]{RarityEffectsLevel.SUBTLE, RarityEffectsLevel.FULL})
 		{
-			RarityEffects.Profile lower = RarityEffects.profile(tiers[i - 1]);
-			RarityEffects.Profile higher = RarityEffects.profile(tiers[i]);
-			String pair = tiers[i - 1] + " -> " + tiers[i];
-			assertTrue(pair, RarityEffects.hasEffects(tiers[i]));
-			assertTrue(pair, higher.getTwinkles() >= lower.getTwinkles());
-			assertTrue(pair, !lower.isHalo() || higher.isHalo());
-			assertTrue(pair, higher.getSparkles() >= lower.getSparkles());
-			assertTrue(pair, higher.getBurstParticles() >= lower.getBurstParticles());
-			assertTrue(pair, !lower.isEdgeGlow() || higher.isEdgeGlow());
+			for (int i = 1; i < tiers.length; i++)
+			{
+				String pair = level + ": " + tiers[i - 1] + " -> " + tiers[i];
+				assertTrue(pair, RarityEffects.hasEffects(tiers[i], level));
+				assertNoMore(pair, RarityEffects.profile(tiers[i - 1], level), RarityEffects.profile(tiers[i], level));
+			}
 		}
+	}
+
+	@Test
+	public void subtleNeverHasMoreThanFull()
+	{
+		for (RarityTier tier : RarityTier.values())
+		{
+			assertNoMore(tier.toString(), RarityEffects.profile(tier, RarityEffectsLevel.SUBTLE),
+				RarityEffects.profile(tier, RarityEffectsLevel.FULL));
+		}
+		assertTrue(RarityEffectsLevel.SUBTLE.getIntensity() < RarityEffectsLevel.FULL.getIntensity());
+	}
+
+	private static void assertNoMore(String message, RarityEffects.Profile lower, RarityEffects.Profile higher)
+	{
+		assertTrue(message, higher.getTwinkles() >= lower.getTwinkles());
+		assertTrue(message, !lower.isHalo() || higher.isHalo());
+		assertTrue(message, higher.getSparkles() >= lower.getSparkles());
+		assertTrue(message, higher.getBurstParticles() >= lower.getBurstParticles());
+		assertTrue(message, !lower.isEdgeGlow() || higher.isEdgeGlow());
 	}
 
 	@Test
@@ -166,27 +195,30 @@ public class RarityEffectsTest
 	{
 		BufferedImage canvas = new BufferedImage(WIDTH + 120, TOTAL_HEIGHT + 120, BufferedImage.TYPE_INT_ARGB);
 		RarityEffects effects = new RarityEffects();
-		for (RarityTier tier : RarityTier.values())
+		for (RarityEffectsLevel level : RarityEffectsLevel.values())
 		{
-			for (long t = 0; t < 4000; t += 400)
+			for (RarityTier tier : RarityTier.values())
 			{
-				RarityEffects.Frame frame = RarityEffects.Frame.builder()
-					.tier(tier).millis(t).alpha(1f).scale(1f)
-					.panelWidth(WIDTH).panelHeight(HEIGHT).totalHeight(TOTAL_HEIGHT)
-					.iconCenterX(WIDTH / 2f).iconCenterY(HEIGHT).iconSize(89)
-					.color(RarityEffects.effectColor(Color.MAGENTA, false))
-					.seed(123).room(ROOM)
-					.build();
-				Graphics2D graphics = canvas.createGraphics();
-				try
+				for (long t = 0; t < 4000; t += 400)
 				{
-					graphics.translate(60, 60);
-					effects.drawUnderIcon(graphics, frame);
-					effects.drawOverIcon(graphics, frame);
-				}
-				finally
-				{
-					graphics.dispose();
+					RarityEffects.Frame frame = RarityEffects.Frame.builder()
+						.tier(tier).level(level).millis(t).alpha(1f).scale(1f)
+						.panelWidth(WIDTH).panelHeight(HEIGHT).totalHeight(TOTAL_HEIGHT)
+						.iconCenterX(WIDTH / 2f).iconCenterY(HEIGHT).iconSize(ICON)
+						.color(RarityEffects.effectColor(Color.MAGENTA))
+						.seed(123).room(ROOM)
+						.build();
+					Graphics2D graphics = canvas.createGraphics();
+					try
+					{
+						graphics.translate(60, 60);
+						effects.drawUnderIcon(graphics, frame);
+						effects.drawOverIcon(graphics, frame);
+					}
+					finally
+					{
+						graphics.dispose();
+					}
 				}
 			}
 		}

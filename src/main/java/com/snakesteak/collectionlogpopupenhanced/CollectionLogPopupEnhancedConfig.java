@@ -4,6 +4,7 @@ import com.snakesteak.collectionlogpopupenhanced.cox.CoxChatCensorMode;
 import com.snakesteak.collectionlogpopupenhanced.overlay.LeftPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.PanelLayout;
 import com.snakesteak.collectionlogpopupenhanced.overlay.PanelStyle;
+import com.snakesteak.collectionlogpopupenhanced.overlay.RarityEffectsLevel;
 import com.snakesteak.collectionlogpopupenhanced.overlay.RightPanelStat;
 import com.snakesteak.collectionlogpopupenhanced.overlay.TextRenderMode;
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
@@ -379,15 +380,16 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
-		keyName = "rarityEffects",
+		keyName = "rarityEffectsLevel",
 		name = "Rarity effects",
-		description = "Adds effects that get bigger the rarer the unlock - none for common, the works for pets.",
+		description = "Adds effects that get bigger the rarer the unlock - none for common, the works for pets."
+			+ " Subtle tones them down, Full is everything. Colourful style only.",
 		position = 6,
 		section = appearanceSection
 	)
-	default boolean rarityEffects()
+	default RarityEffectsLevel rarityEffects()
 	{
-		return false;
+		return RarityEffectsLevel.SUBTLE;
 	}
 
 	@ConfigItem(

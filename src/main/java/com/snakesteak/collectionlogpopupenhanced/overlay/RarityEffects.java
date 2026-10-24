@@ -40,21 +40,29 @@ class RarityEffects
 	// How far, at 100% scale, anything may spill past the panel - further still limited by the room on screen.
 	static final int BASE_MAX_OVERFLOW = 60;
 
-	private static final Color NEUTRAL_EFFECT_COLOR = new Color(255, 226, 140);
+	private static final Profile NONE = new Profile(0, false, 0, 0, false, false);
 
-	private static final Map<RarityTier, Profile> PROFILES = new EnumMap<>(RarityTier.class);
+	private static final Map<RarityTier, Profile> FULL_PROFILES = new EnumMap<>(RarityTier.class);
+	private static final Map<RarityTier, Profile> SUBTLE_PROFILES = new EnumMap<>(RarityTier.class);
 
 	static
 	{
-		PROFILES.put(RarityTier.COMMON, new Profile(0, false, 0, 0, false, false));
-		PROFILES.put(RarityTier.UNCOMMON, new Profile(3, false, 0, 0, false, false));
-		PROFILES.put(RarityTier.RARE, new Profile(3, true, 0, 0, false, false));
-		PROFILES.put(RarityTier.VERY_RARE, new Profile(3, true, 8, 0, false, false));
-		PROFILES.put(RarityTier.PET, new Profile(3, true, 20, 28, true, true));
+		FULL_PROFILES.put(RarityTier.COMMON, NONE);
+		FULL_PROFILES.put(RarityTier.UNCOMMON, new Profile(3, false, 0, 0, false, false));
+		FULL_PROFILES.put(RarityTier.RARE, new Profile(3, true, 0, 0, false, false));
+		FULL_PROFILES.put(RarityTier.VERY_RARE, new Profile(3, true, 8, 0, false, false));
+		FULL_PROFILES.put(RarityTier.PET, new Profile(3, true, 20, 28, true, true));
+
+		SUBTLE_PROFILES.put(RarityTier.COMMON, NONE);
+		SUBTLE_PROFILES.put(RarityTier.UNCOMMON, new Profile(2, false, 0, 0, false, false));
+		SUBTLE_PROFILES.put(RarityTier.RARE, new Profile(2, true, 0, 0, false, false));
+		SUBTLE_PROFILES.put(RarityTier.VERY_RARE, new Profile(2, true, 4, 0, false, false));
+		SUBTLE_PROFILES.put(RarityTier.PET, new Profile(2, true, 10, 14, true, true));
 	}
 
 	/**
-	 * What each tier gets. Every field only ever grows tier to tier, so a rarer unlock never has less.
+	 * What each tier gets. Every field only ever grows tier to tier, so a rarer unlock never has less,
+	 * and Subtle never has more than Full.
 	 */
 	@Value
 	static class Profile
@@ -78,6 +86,7 @@ class RarityEffects
 	static class Frame
 	{
 		RarityTier tier;
+		RarityEffectsLevel level;
 		// Since the effects started.
 		long millis;
 		// Fade-out, opacity and fade-in combined.
@@ -107,23 +116,27 @@ class RarityEffects
 		float hue;
 	}
 
-	static Profile profile(RarityTier tier)
+	static Profile profile(RarityTier tier, RarityEffectsLevel level)
 	{
-		return PROFILES.get(tier);
+		switch (level)
+		{
+			case FULL:
+				return FULL_PROFILES.get(tier);
+			case SUBTLE:
+				return SUBTLE_PROFILES.get(tier);
+			default:
+				return NONE;
+		}
 	}
 
-	static boolean hasEffects(RarityTier tier)
+	static boolean hasEffects(RarityTier tier, RarityEffectsLevel level)
 	{
-		return profile(tier).hasAny();
+		return profile(tier, level).hasAny();
 	}
 
 	/** {@code color} blended {@code amount} of the way to white - reads as light over any tier colour. */
-	static Color effectColor(Color tierColor, boolean neutral)
+	static Color effectColor(Color tierColor)
 	{
-		if (neutral)
-		{
-			return NEUTRAL_EFFECT_COLOR;
-		}
 		float amount = 0.5f;
 		return new Color(
 			Math.round(tierColor.getRed() + (255 - tierColor.getRed()) * amount),
@@ -281,7 +294,7 @@ class RarityEffects
 	/** Edge glow and halo - everything that sits beneath the icon. */
 	void drawUnderIcon(Graphics2D graphics, Frame frame)
 	{
-		Profile profile = profile(frame.getTier());
+		Profile profile = profile(frame.getTier(), frame.getLevel());
 		Composite composite = graphics.getComposite();
 		Paint paint = graphics.getPaint();
 		Stroke stroke = graphics.getStroke();
@@ -307,7 +320,7 @@ class RarityEffects
 	/** Twinkles, sparkles and the burst - drawn over the icon. */
 	void drawOverIcon(Graphics2D graphics, Frame frame)
 	{
-		Profile profile = profile(frame.getTier());
+		Profile profile = profile(frame.getTier(), frame.getLevel());
 		if (profile.getTwinkles() == 0 && profile.getSparkles() == 0 && profile.getBurstParticles() == 0)
 		{
 			return;

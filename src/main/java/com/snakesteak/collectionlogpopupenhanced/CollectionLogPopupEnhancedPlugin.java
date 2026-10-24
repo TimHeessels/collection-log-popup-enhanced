@@ -81,8 +81,21 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	// screenshots from the chat line instead of the popup, which happens at raid end regardless.
 	private static final int COLLECTION_NEW_ITEM_CHAT_ONLY = 1;
 
+	// OPTION_COLLECTION_NEW_ITEM is a bitmask (0-3), confirmed by toggling both settings with logging on.
+	private static final int COLLECTION_NEW_ITEM_CHAT_BIT = 1;
+	private static final int COLLECTION_NEW_ITEM_POPUP_BIT = 2;
+	// Read on the first tick instead - the varbit reads 0 at LOGGED_IN and briefly syncs through 0.
+	private static final int COLLECTION_SETTING_SYNCING = -1;
+
+	// Purple, so these don't read as one of the game's own red notices.
+	private static final String WARNING_COLOUR_TAG = "<col=A020F0>";
+
+	private static final String GAME_SETTING_WARNING_PREFIX = WARNING_COLOUR_TAG + "Collection Log Popup Enhanced: please turn on ";
+	private static final String CHAT_SETTING_NAME = "'Collection log - New addition notification'";
+	private static final String POPUP_SETTING_NAME = "'Collection log - New addition popup'";
+
 	private static final String COX_CENSOR_PLUGIN_CLASS = "com.coxspecialloothider.CoxSpecialLootHiderPlugin";
-	private static final String COX_CENSOR_CONFLICT_WARNING = "<col=ff0000>Collection Log Popup Enhanced: please turn off"
+	private static final String COX_CENSOR_CONFLICT_WARNING = WARNING_COLOUR_TAG + "Collection Log Popup Enhanced: please turn off"
 		+ " the CoX Censor plugin, this plugin already does the same thing.";
 	private static final String COX_CHAT_CENSOR_HINT = " To hide CoX loot in chat as well, turn on 'Chatbox censor'"
 		+ " under 'Chambers of Xeric censor' in this plugin's settings.";
@@ -159,10 +172,14 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	// The real notification title while it is swapped for SPOOFED_NOTIFICATION_TITLE, else null.
 	private String spoofedNotificationTitle;
 
-	private boolean coxCensorConflictWarned;
-
 	// Tracked rather than read from the event, which has no previous value - so the warning fires on entry only.
 	private boolean inCoxRaid;
+
+	// Last seen OPTION_COLLECTION_NEW_ITEM, so a menu toggle warns only when it turns a required setting off.
+	private int collectionSetting = COLLECTION_SETTING_SYNCING;
+
+	// Login reminders wait for the first tick, so they land below the game's welcome lines.
+	private boolean warnOnFirstTick = true;
 
 	@Override
 	protected void startUp() throws Exception
@@ -174,6 +191,9 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		overlayManager.add(collectionLogOverlay);
 		localDropRateDatasetLoader.load();
 		localRarityDatasetLoader.load();
+		// RuneLite reuses this instance on re-enable, so a hub install and a re-enable both warn again.
+		collectionSetting = COLLECTION_SETTING_SYNCING;
+		warnOnFirstTick = true;
 		log.debug("Collection Log Popup Enhanced started!");
 	}
 
@@ -239,6 +259,18 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		if ("panelStyle".equals(configChanged.getKey()) && config.panelStyle() == PanelStyle.AUDIO_ONLY)
 		{
 			clientThread.invoke(() -> setNativePopupPaintHidden(false));
+		}
+		else if ("panelStyle".equals(configChanged.getKey())
+			&& PanelStyle.AUDIO_ONLY.name().equals(configChanged.getOldValue()))
+		{
+			// Leaving Audio only makes the popup setting required.
+			clientThread.invoke(() ->
+			{
+				if (collectionSetting != COLLECTION_SETTING_SYNCING)
+				{
+					warnIfGameSettingsMissing(missingGameSettings(collectionSetting));
+				}
+			});
 		}
 		else if ("coxChatCensor".equals(configChanged.getKey()))
 		{
@@ -319,22 +351,27 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 			coxChatCensor.reveal();
 		}
 
-		// LOGGED_IN refires after every region load and hop, so the flag keeps it to once per login.
+		// A hop or reconnect resyncs the varbit too, but only a fresh login warns about it again.
+		if (state == GameState.LOGIN_SCREEN || state == GameState.HOPPING || state == GameState.CONNECTION_LOST)
+		{
+			collectionSetting = COLLECTION_SETTING_SYNCING;
+		}
 		if (state == GameState.LOGIN_SCREEN)
 		{
-			coxCensorConflictWarned = false;
+			warnOnFirstTick = true;
 			inCoxRaid = false;
-		}
-		else if (state == GameState.LOGGED_IN && !coxCensorConflictWarned)
-		{
-			coxCensorConflictWarned = true;
-			warnIfCoxCensorConflicts();
 		}
 	}
 
 	@Subscribe
 	public void onVarbitChanged(VarbitChanged varbitChanged)
 	{
+		if (varbitChanged.getVarbitId() == VarbitID.OPTION_COLLECTION_NEW_ITEM)
+		{
+			onCollectionSettingChanged(varbitChanged.getValue());
+			return;
+		}
+
 		if (varbitChanged.getVarbitId() != VarbitID.RAIDS_CLIENT_INDUNGEON)
 		{
 			return;
@@ -365,6 +402,61 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	private boolean isAnyCoxSettingOn()
 	{
 		return config.delayCoxPopupUntilChest() || config.coxChatCensor() != CoxChatCensorMode.OFF;
+	}
+
+	private void onCollectionSettingChanged(int value)
+	{
+		if (collectionSetting == COLLECTION_SETTING_SYNCING)
+		{
+			return;
+		}
+
+		int newlyMissing = missingGameSettings(value) & ~missingGameSettings(collectionSetting);
+		collectionSetting = value;
+		if (newlyMissing != 0)
+		{
+			warnIfGameSettingsMissing(missingGameSettings(value));
+		}
+	}
+
+	/**
+	 * Without the chat line no unlock is detected; without the popup the Screenshot plugin captures
+	 * before the panel is drawn. Audio only leaves the native popup showing, so it doesn't need it.
+	 *
+	 * @return the required OPTION_COLLECTION_NEW_ITEM bits that are not set in {@code value}
+	 */
+	private int missingGameSettings(int value)
+	{
+		int required = COLLECTION_NEW_ITEM_CHAT_BIT;
+		if (config.panelStyle() != PanelStyle.AUDIO_ONLY)
+		{
+			required |= COLLECTION_NEW_ITEM_POPUP_BIT;
+		}
+		return required & ~value;
+	}
+
+	private void warnIfGameSettingsMissing(int missing)
+	{
+		boolean chatMissing = (missing & COLLECTION_NEW_ITEM_CHAT_BIT) != 0;
+		boolean popupMissing = (missing & COLLECTION_NEW_ITEM_POPUP_BIT) != 0;
+		String message;
+		if (chatMissing && popupMissing)
+		{
+			message = CHAT_SETTING_NAME + " and " + POPUP_SETTING_NAME + " in the game settings.";
+		}
+		else if (chatMissing)
+		{
+			message = CHAT_SETTING_NAME + " in the game settings, or new unlocks won't be detected.";
+		}
+		else if (popupMissing)
+		{
+			message = POPUP_SETTING_NAME + " in the game settings, or unlock screenshots are taken before the popup is drawn.";
+		}
+		else
+		{
+			return;
+		}
+		client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", GAME_SETTING_WARNING_PREFIX + message + "</col>", null);
 	}
 
 	/**
@@ -442,6 +534,17 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Subscribe
 	public void onGameTick(GameTick gameTick)
 	{
+		if (collectionSetting == COLLECTION_SETTING_SYNCING)
+		{
+			collectionSetting = client.getVarbitValue(VarbitID.OPTION_COLLECTION_NEW_ITEM);
+			if (warnOnFirstTick)
+			{
+				warnOnFirstTick = false;
+				warnIfGameSettingsMissing(missingGameSettings(collectionSetting));
+				warnIfCoxCensorConflicts();
+			}
+		}
+
 		PreviewTier previewTier = config.previewTier();
 		if (previewTier != previousPreviewTier)
 		{

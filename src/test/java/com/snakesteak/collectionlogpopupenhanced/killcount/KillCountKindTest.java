@@ -29,6 +29,7 @@ public class KillCountKindTest
 		assertEquals("ToA completions: ", KillCountKind.COMPLETIONS.labelFor("Tombs of Amascut"));
 		assertEquals("ToA Entry: ", KillCountKind.COMPLETIONS.labelFor("Tombs of Amascut: Entry Mode"));
 		assertEquals("ToA Expert: ", KillCountKind.COMPLETIONS.labelFor("Tombs of Amascut: Expert Mode"));
+		assertEquals("TFA completions: ", KillCountKind.COMPLETIONS.labelFor("Fractured Archive"));
 	}
 
 	@Test

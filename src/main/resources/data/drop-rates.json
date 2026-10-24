@@ -742,6 +742,7 @@
 	"Cave crawler": {
 		"Bronze boots": 0.0078125,
 		"Dragon spear": 1.4305114678370145e-06,
+		"Frozen tear": 0.007462686567164201,
 		"Shield left half": 1.9073486328125e-06
 	},
 	"Cave goblin (Dorgesh-Kaan)": {
@@ -854,6 +855,20 @@
 	"Chest (Obor's lair)": {
 		"Giant key": 0.0625,
 		"Hill giant club": 0.008474576271186418
+	},
+	"Chest (The Fractured Archive)": {
+		"Archivist's folio (inert)": 0.050000000000000044,
+		"Ascension crossbows": 0.16666666666666663,
+		"Ascension shards": 0.3829412867944644,
+		"Desiccated page": 0.05958648796714905,
+		"Fragment of burning fire": 0.012499999999999956,
+		"Fragment of deep water": 0.012499999999999956,
+		"Fragment of living earth": 0.012499999999999956,
+		"Fragment of whispering wind": 0.012499999999999956,
+		"Horn of Bran": 0.2222222222222222,
+		"Obligator (uncharged)": 0.05555555555555558,
+		"Rondache": 0.33333333333333326,
+		"Zorya's tome (uncharged)": 0.2222222222222222
 	},
 	"Chest (Tombs of Amascut)": {
 		"Breach of the Scarab": 0.020000000000000018,
@@ -1974,6 +1989,12 @@
 		"Hobgoblin champion scroll": 0.00019999999999997797,
 		"Shield left half": 3.814697265625e-06
 	},
+	"Huge port reward bag": {
+		"Dragon cannonball": 0.026666666666666616,
+		"Dragon metal sheet": 0.004444444444444473,
+		"Dragon nails": 0.01777777777777778,
+		"Zulrah's scales": 0.013333333333333308
+	},
 	"Hunters' loot sack (adept)": {
 		"Guild hunter boots": 0.020000000000000018,
 		"Guild hunter headwear": 0.020000000000000018,
@@ -2223,8 +2244,8 @@
 	},
 	"Killerwatt": {
 		"Air diamond": 0.015625,
-		"Dragon spear": 6.539481169354211e-06,
-		"Shield left half": 8.719308035698425e-06
+		"Dragon spear": 6.586527508289919e-06,
+		"Shield left half": 8.782036870491616e-06
 	},
 	"King Black Dragon": {
 		"Draconic visage": 0.00019999999999997797,
@@ -2306,6 +2327,9 @@
 	"Lanzig": {
 		"Dragon spear": 3.5762786820825454e-07,
 		"Shield left half": 4.76837158203125e-07
+	},
+	"Large port reward bag": {
+		"Zulrah's scales": 0.012903225806451646
 	},
 	"Large salvage": {
 		"Broken compass": 0.0003333333333332966,
@@ -2517,6 +2541,10 @@
 		"Long bone": 0.0024999999999999467,
 		"Shield left half": 4.8271960362944455e-05
 	},
+	"Medium port reward bag": {
+		"Spirit flakes": 0.012499999999999956,
+		"Zulrah's scales": 0.012499999999999956
+	},
 	"Menaphite Thug": {
 		"Rocky": 3.912577371201209e-06
 	},
@@ -2664,13 +2692,13 @@
 	},
 	"Mutated Tortoise": {
 		"Curved bone": 0.00019950124688283832,
-		"Dragon spear": 8.58306917506102e-06,
+		"Dragon spear": 2.5748986518636663e-05,
 		"Dust battlestaff": 0.0042918454935622075,
 		"Eternal gem": 0.001225490196078427,
 		"Imbued heart": 0.001225490196078427,
 		"Long bone": 0.0024999999999999467,
 		"Mist battlestaff": 0.0042918454935622075,
-		"Shield left half": 1.1444092233414693e-05,
+		"Shield left half": 3.4331883799976204e-05,
 		"Warped sceptre (uncharged)": 0.0031250000000000444
 	},
 	"Muttadile": {
@@ -4448,6 +4476,9 @@
 		"Mystic gloves (light)": 0.001953125,
 		"Shield left half": 1.1444092233414693e-05
 	},
+	"Small port reward bag": {
+		"Spirit flakes": 0.011904761904761862
+	},
 	"Small salvage": {
 		"Boat bottle (empty)": 0.0013333333333332975,
 		"Rusty locket": 0.0003333333333332966,
@@ -4828,6 +4859,10 @@
 	},
 	"Tin rocks": {
 		"Rock golem": 1.3484812729780415e-06
+	},
+	"Tiny port reward bag": {
+		"Rum": 0.0013020833333333703,
+		"Spirit flakes": 0.01041666666666663
 	},
 	"Tormented Demon": {
 		"Burning claw": 0.0019959999999999978,

@@ -75,7 +75,8 @@ public enum KillCountKind
 		Map.entry("theatre of blood: hard mode", "ToB Hard Mode: "),
 		Map.entry("tombs of amascut", "ToA completions: "),
 		Map.entry("tombs of amascut: entry mode", "ToA Entry: "),
-		Map.entry("tombs of amascut: expert mode", "ToA Expert: "));
+		Map.entry("tombs of amascut: expert mode", "ToA Expert: "),
+		Map.entry("fractured archive", "TFA completions: "));
 
 	private final String label;
 

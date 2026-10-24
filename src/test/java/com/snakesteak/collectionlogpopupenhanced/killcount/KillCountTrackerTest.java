@@ -278,6 +278,28 @@ public class KillCountTrackerTest
 	}
 
 	@Test
+	public void matchesFracturedArchiveAgainstTabWithArticle()
+	{
+		fireMessage("Your completed Fractured Archive count is: <col=ff0000>83</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Fractured Archive"));
+		assertEquals("Fractured Archive", kill.getSource());
+		assertEquals(83, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
+	public void matchesFracturedArchiveWithColourMacro()
+	{
+		// The red colour form is unconfirmed for this raid, so the macro form is covered too.
+		fireMessage("Your completed Fractured Archive count is: @mes_hl_red@83</col>.");
+
+		KillCountTracker.RecentKill kill = tracker.killCountFor(List.of("The Fractured Archive"));
+		assertEquals(83, kill.getKillCount());
+		assertEquals(KillCountKind.COMPLETIONS, kill.getKind());
+	}
+
+	@Test
 	public void matchesFightCavesAgainstTzTokJadAlias()
 	{
 		fireMessage("Your TzTok-Jad kill count is: <col=ff0000>99</col>.");

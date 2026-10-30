@@ -82,6 +82,13 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	)
 	String tweaksSection = "tweaksSection";
 
+	@ConfigSection(
+		name = "Debug",
+		description = "Diagnostics for bug reports",
+		position = 99
+	)
+	String debugSection = "debugSection";
+
 	@ConfigItem(
 		keyName = "previewTier",
 		name = "Preview popup",
@@ -547,6 +554,18 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	default CoxChatCensorMode coxChatCensor()
 	{
 		return CoxChatCensorMode.OFF;
+	}
+
+	@ConfigItem(
+		keyName = "coxChatDebugLog",
+		name = "Log CoX chat",
+		description = "Write chat lines received in CoX, and what the censor did with them, to client.log for bug reports. Turn it off again once the report is sent.",
+		position = 0,
+		section = debugSection
+	)
+	default boolean coxChatDebugLog()
+	{
+		return false;
 	}
 
 }

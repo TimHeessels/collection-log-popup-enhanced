@@ -1,9 +1,11 @@
 package com.snakesteak.collectionlogpopupenhanced.cox;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -74,6 +76,8 @@ public class CoxChatCensor
 	private final Set<String> trackedOwnItems = new HashSet<>();
 	// Every line naming a purple, by MessageNode id - other plugins may rewrite the text, but not the id.
 	private final Map<Integer, Candidate> candidates = new HashMap<>();
+	// Message ids already written to the debug log as censored.
+	private final Set<Integer> loggedCensors = new HashSet<>();
 
 	@Inject
 	CoxChatCensor(Client client, CollectionLogPopupEnhancedConfig config)
@@ -85,30 +89,66 @@ public class CoxChatCensor
 	@Subscribe
 	public void onChatMessage(ChatMessage chatMessage)
 	{
-		CoxChatCensorMode mode = config.coxChatCensor();
-		if (mode == CoxChatCensorMode.OFF || PLAYER_TYPED.contains(chatMessage.getType()))
+		if (PLAYER_TYPED.contains(chatMessage.getType()))
 		{
 			return;
 		}
 
+		String decision = classify(chatMessage, config.coxChatCensor());
+		if (config.coxChatDebugLog() && isInRaid())
+		{
+			MessageNode node = chatMessage.getMessageNode();
+			Player local = client.getLocalPlayer();
+			log.info("[CoX chat] type={} id={} name=\"{}\" sender=\"{}\" mode={} self=\"{}\" message=\"{}\" -> {}",
+				chatMessage.getType(),
+				node == null ? "null" : node.getId(),
+				escape(chatMessage.getName()),
+				escape(chatMessage.getSender()),
+				config.coxChatCensor(),
+				local == null ? "null" : escape(local.getName()),
+				escape(chatMessage.getMessage()),
+				decision);
+		}
+	}
+
+	/**
+	 * Records the line as a candidate and starts censoring it when it belongs to the player's own raid.
+	 *
+	 * @return what was decided, for the debug log
+	 */
+	private String classify(ChatMessage chatMessage, CoxChatCensorMode mode)
+	{
+		if (mode == CoxChatCensorMode.OFF)
+		{
+			return "censor off";
+		}
+
 		String message = chatMessage.getMessage();
 		String unique = CoxLootParser.findUnique(message);
-		MessageNode node = chatMessage.getMessageNode();
-		if (unique == null || node == null)
+		if (unique == null)
 		{
-			return;
+			return "no purple";
 		}
-		log.debug("CoX unique in chat, type {}: {}", chatMessage.getType(), message);
+		MessageNode node = chatMessage.getMessageNode();
+		if (node == null)
+		{
+			return "purple " + unique + ", no message node";
+		}
 
 		ChatMessageType type = chatMessage.getType();
 		if (type == ChatMessageType.GAMEMESSAGE && CoxLootParser.isOwnLootGameMessage(message))
 		{
 			candidates.put(node.getId(), new Candidate(null, unique, true, CensorStyle.AFTER_COLON));
-			if (isInRaid() && trackedOwnItems.add(unique))
+			if (!isInRaid())
+			{
+				return "own loot line, not in raid";
+			}
+			if (trackedOwnItems.add(unique))
 			{
 				client.refreshChat();
+				return "own loot line, tracking " + unique;
 			}
-			return;
+			return "own loot line, already tracking " + unique;
 		}
 
 		// Every line below must prove it is the player's own raid: clan broadcasts also arrive for clanmates' raids.
@@ -117,11 +157,7 @@ public class CoxChatCensor
 		{
 			CoxLootParser.LootBroadcast loot = clan.get();
 			candidates.put(node.getId(), candidate(loot, CensorStyle.AFTER_COLON));
-			if (isInOwnRaid(loot.getPlayer()))
-			{
-				trackBroadcast(loot, mode);
-			}
-			return;
+			return "clan broadcast, " + trackBroadcast(loot, mode);
 		}
 
 		Optional<CoxLootParser.LootBroadcast> party = CoxLootParser.parsePartyLoot(message);
@@ -129,11 +165,9 @@ public class CoxChatCensor
 		{
 			CoxLootParser.LootBroadcast loot = party.get();
 			candidates.put(node.getId(), candidate(loot, CensorStyle.ITEM));
-			if (isInOwnRaid(loot.getPlayer()))
-			{
-				trackBroadcast(loot, mode);
-			}
+			return "party line, " + trackBroadcast(loot, mode);
 		}
+		return "purple " + unique + ", no known format";
 	}
 
 	@Subscribe
@@ -157,9 +191,17 @@ public class CoxChatCensor
 			return;
 		}
 
-		objectStack[objectStackSize - 1] = candidate.getStyle() == CensorStyle.ITEM
+		String censored = candidate.getStyle() == CensorStyle.ITEM
 			? CoxLootParser.censorItem(message, candidate.getItem())
 			: CoxLootParser.censorAfterColon(message);
+		objectStack[objectStackSize - 1] = censored;
+
+		// The chatbox is rebuilt often, so each line is logged only the first time it is censored.
+		if (config.coxChatDebugLog() && loggedCensors.add(intStack[intStackSize - 1]))
+		{
+			log.info("[CoX chat] censored id={} drawn=\"{}\" as=\"{}\"",
+				intStack[intStackSize - 1], escape(message), escape(censored));
+		}
 	}
 
 	/**
@@ -169,6 +211,12 @@ public class CoxChatCensor
 	public void reveal()
 	{
 		boolean wasCensoring = isCensoring();
+		if (config.coxChatDebugLog() && !candidates.isEmpty())
+		{
+			log.info("[CoX chat] reveal: {} candidate line(s), tracking {} and own items {}",
+				candidates.size(), trackedBroadcasts, trackedOwnItems);
+		}
+		loggedCensors.clear();
 		trackedBroadcasts.clear();
 		trackedOwnItems.clear();
 		candidates.clear();
@@ -221,17 +269,65 @@ public class CoxChatCensor
 		return isLocalPlayer(name);
 	}
 
-	private void trackBroadcast(CoxLootParser.LootBroadcast loot, CoxChatCensorMode mode)
+	/**
+	 * @return what was decided, for the debug log
+	 */
+	private String trackBroadcast(CoxLootParser.LootBroadcast loot, CoxChatCensorMode mode)
 	{
+		if (!isInOwnRaid(loot.getPlayer()))
+		{
+			return "\"" + escape(loot.getPlayer()) + "\" not in own raid, players " + raidPlayerNames();
+		}
 		if (mode == CoxChatCensorMode.OWN && !isLocalPlayer(loot.getPlayer()))
 		{
-			return;
+			return "not own drop, mode OWN";
 		}
 		// Refresh even for an already drawn line: the party line is drawn before the clan line that may track it.
 		if (trackedBroadcasts.add(key(loot)))
 		{
 			client.refreshChat();
+			return "tracking " + key(loot);
 		}
+		return "already tracking " + key(loot);
+	}
+
+	private List<String> raidPlayerNames()
+	{
+		if (!isInRaid())
+		{
+			return List.of("(not in raid)");
+		}
+		List<String> names = new ArrayList<>();
+		for (Player player : client.getTopLevelWorldView().players())
+		{
+			if (player != null && player.getName() != null)
+			{
+				names.add(escape(player.getName()));
+			}
+		}
+		return names;
+	}
+
+	// Colour tags stay readable as they are; invisible characters such as non-breaking spaces are spelled out.
+	private static String escape(String text)
+	{
+		if (text == null)
+		{
+			return "null";
+		}
+		StringBuilder escaped = new StringBuilder(text.length());
+		for (char c : text.toCharArray())
+		{
+			if (c >= 0x20 && c < 0x7F && c != '"')
+			{
+				escaped.append(c);
+			}
+			else
+			{
+				escaped.append(String.format("\\u%04X", (int) c));
+			}
+		}
+		return escaped.toString();
 	}
 
 	private boolean isLocalPlayer(String name)

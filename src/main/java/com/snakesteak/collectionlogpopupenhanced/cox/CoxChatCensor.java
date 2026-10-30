@@ -1,14 +1,19 @@
 package com.snakesteak.collectionlogpopupenhanced.cox;
 
 import com.snakesteak.collectionlogpopupenhanced.CollectionLogPopupEnhancedConfig;
+import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.Client;
+import net.runelite.api.MessageNode;
 import net.runelite.api.Player;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.ScriptCallbackEvent;
@@ -22,13 +27,43 @@ import net.runelite.client.util.Text;
  * the string the script is about to draw. The stored messages are never touched, so revealing is
  * just forgetting what was tracked and rebuilding the chatbox - nothing can be left censored by a
  * missed restore, and other plugins reading ChatMessage still see the real text.
- * <p>Tracking only starts from the player's own raid: the party line, or a clan broadcast while in the dungeon.
+ * <p>Each line is classified once, on arrival, and remembered by message id; tracking only starts from the player's own raid.
  */
 @Slf4j
 @Singleton
 public class CoxChatCensor
 {
 	private static final String CHAT_FILTER_CHECK = "chatFilterCheck";
+
+	// Lines players can type themselves never start or receive a censor.
+	private static final Set<ChatMessageType> PLAYER_TYPED = EnumSet.of(
+		ChatMessageType.PUBLICCHAT,
+		ChatMessageType.MODCHAT,
+		ChatMessageType.PRIVATECHAT,
+		ChatMessageType.PRIVATECHATOUT,
+		ChatMessageType.MODPRIVATECHAT,
+		ChatMessageType.FRIENDSCHAT,
+		ChatMessageType.CLAN_CHAT,
+		ChatMessageType.CLAN_GUEST_CHAT,
+		ChatMessageType.CLAN_GIM_CHAT,
+		ChatMessageType.AUTOTYPER,
+		ChatMessageType.MODAUTOTYPER);
+
+	private enum CensorStyle
+	{
+		ITEM,
+		AFTER_COLON
+	}
+
+	@Value
+	private static class Candidate
+	{
+		// Standardised "name|item", or null for the local player's own game messages, which carry no name.
+		String key;
+		String item;
+		boolean localPlayer;
+		CensorStyle style;
+	}
 
 	private final Client client;
 	private final CollectionLogPopupEnhancedConfig config;
@@ -37,6 +72,8 @@ public class CoxChatCensor
 	private final Set<String> trackedBroadcasts = new HashSet<>();
 	// The local player's own game messages carry no name, so they are tracked by item alone.
 	private final Set<String> trackedOwnItems = new HashSet<>();
+	// Every line naming a purple, by MessageNode id - other plugins may rewrite the text, but not the id.
+	private final Map<Integer, Candidate> candidates = new HashMap<>();
 
 	@Inject
 	CoxChatCensor(Client client, CollectionLogPopupEnhancedConfig config)
@@ -49,52 +86,60 @@ public class CoxChatCensor
 	public void onChatMessage(ChatMessage chatMessage)
 	{
 		CoxChatCensorMode mode = config.coxChatCensor();
-		if (mode == CoxChatCensorMode.OFF)
+		if (mode == CoxChatCensorMode.OFF || PLAYER_TYPED.contains(chatMessage.getType()))
 		{
 			return;
 		}
 
 		String message = chatMessage.getMessage();
 		String unique = CoxLootParser.findUnique(message);
-		if (unique == null)
+		MessageNode node = chatMessage.getMessageNode();
+		if (unique == null || node == null)
 		{
 			return;
 		}
 		log.debug("CoX unique in chat, type {}: {}", chatMessage.getType(), message);
 
-		switch (chatMessage.getType())
+		ChatMessageType type = chatMessage.getType();
+		if (type == ChatMessageType.GAMEMESSAGE && CoxLootParser.isOwnLootGameMessage(message))
 		{
-			case FRIENDSCHATNOTIFICATION:
-				CoxLootParser.parsePartyLoot(message).ifPresent(loot -> trackBroadcast(loot, mode));
-				break;
-			case CLAN_MESSAGE:
-			case CLAN_GUEST_MESSAGE:
-			case CLAN_GIM_MESSAGE:
-				// Clan broadcasts also arrive for clanmates' raids, so only the player's own instance counts.
-				clanLoot(message).filter(loot -> isInOwnRaid(loot.getPlayer())).ifPresent(loot -> trackBroadcast(loot, mode));
-				break;
-			case GAMEMESSAGE:
-				if (CoxLootParser.isOwnLootGameMessage(message))
-				{
-					if (trackedOwnItems.add(unique))
-					{
-						client.refreshChat();
-					}
-				}
-				else
-				{
-					CoxLootParser.parsePartyLoot(message).ifPresent(loot -> trackBroadcast(loot, mode));
-				}
-				break;
-			default:
-				break;
+			candidates.put(node.getId(), new Candidate(null, unique, true, CensorStyle.AFTER_COLON));
+			if (isInRaid() && trackedOwnItems.add(unique))
+			{
+				client.refreshChat();
+			}
+			return;
+		}
+
+		// Every line below must prove it is the player's own raid: clan broadcasts also arrive for clanmates' raids.
+		Optional<CoxLootParser.LootBroadcast> clan = CoxLootParser.parseClanBroadcast(message);
+		if (clan.isPresent())
+		{
+			CoxLootParser.LootBroadcast loot = clan.get();
+			candidates.put(node.getId(), candidate(loot, CensorStyle.AFTER_COLON));
+			if (isInOwnRaid(loot.getPlayer()))
+			{
+				trackBroadcast(loot, mode);
+			}
+			return;
+		}
+
+		Optional<CoxLootParser.LootBroadcast> party = CoxLootParser.parsePartyLoot(message);
+		if (party.isPresent())
+		{
+			CoxLootParser.LootBroadcast loot = party.get();
+			candidates.put(node.getId(), candidate(loot, CensorStyle.ITEM));
+			if (isInOwnRaid(loot.getPlayer()))
+			{
+				trackBroadcast(loot, mode);
+			}
 		}
 	}
 
 	@Subscribe
 	public void onScriptCallbackEvent(ScriptCallbackEvent event)
 	{
-		if (!CHAT_FILTER_CHECK.equals(event.getEventName()) || !isCensoring())
+		if (!CHAT_FILTER_CHECK.equals(event.getEventName()) || !isCensoring() || candidates.isEmpty())
 		{
 			return;
 		}
@@ -104,18 +149,17 @@ public class CoxChatCensor
 		Object[] objectStack = client.getObjectStack();
 		int objectStackSize = client.getObjectStackSize();
 
-		ChatMessageType type = ChatMessageType.of(intStack[intStackSize - 2]);
+		// Looked up by message id, as ChatFilterPlugin does: the raw type can't express CLAN_GIM_MESSAGE (id -1).
+		Candidate candidate = candidates.get(intStack[intStackSize - 1]);
 		String message = (String) objectStack[objectStackSize - 1];
-		if (message == null)
+		if (candidate == null || message == null || !isCensored(candidate))
 		{
 			return;
 		}
 
-		String censored = censor(type, message);
-		if (censored != null)
-		{
-			objectStack[objectStackSize - 1] = censored;
-		}
+		objectStack[objectStackSize - 1] = candidate.getStyle() == CensorStyle.ITEM
+			? CoxLootParser.censorItem(message, candidate.getItem())
+			: CoxLootParser.censorAfterColon(message);
 	}
 
 	/**
@@ -127,6 +171,7 @@ public class CoxChatCensor
 		boolean wasCensoring = isCensoring();
 		trackedBroadcasts.clear();
 		trackedOwnItems.clear();
+		candidates.clear();
 		if (wasCensoring)
 		{
 			client.refreshChat();
@@ -139,53 +184,29 @@ public class CoxChatCensor
 			&& (!trackedBroadcasts.isEmpty() || !trackedOwnItems.isEmpty());
 	}
 
-	/**
-	 * @return the line to draw instead, or null to leave it as it is
-	 */
-	private String censor(ChatMessageType type, String message)
+	private boolean isCensored(Candidate candidate)
 	{
-		switch (type)
+		if (candidate.getKey() != null && trackedBroadcasts.contains(candidate.getKey()))
 		{
-			case FRIENDSCHATNOTIFICATION:
-				return censorPartyLoot(message);
-			case CLAN_MESSAGE:
-			case CLAN_GUEST_MESSAGE:
-			case CLAN_GIM_MESSAGE:
-				Optional<CoxLootParser.LootBroadcast> broadcast = CoxLootParser.parseClanBroadcast(message);
-				if (broadcast.isPresent())
-				{
-					return isTracked(broadcast.get()) ? CoxLootParser.censorAfterColon(message) : null;
-				}
-				return censorPartyLoot(message);
-			case GAMEMESSAGE:
-				if (CoxLootParser.isOwnLootGameMessage(message))
-				{
-					return trackedOwnItems.contains(CoxLootParser.findUnique(message)) ? CoxLootParser.censorAfterColon(message) : null;
-				}
-				return censorPartyLoot(message);
-			default:
-				return null;
+			return true;
 		}
+		// The player's own party or clan line is hidden by their own valuable drop / clog message too.
+		return candidate.isLocalPlayer() && trackedOwnItems.contains(candidate.getItem());
 	}
 
-	private String censorPartyLoot(String message)
+	private Candidate candidate(CoxLootParser.LootBroadcast loot, CensorStyle style)
 	{
-		return CoxLootParser.parsePartyLoot(message)
-			.filter(this::isTracked)
-			.map(loot -> CoxLootParser.censorItem(message, loot.getItem()))
-			.orElse(null);
+		return new Candidate(key(loot), loot.getItem(), isLocalPlayer(loot.getPlayer()), style);
 	}
 
-	// The "Name - Item" party line may arrive on a clan type too, so either shape is accepted.
-	private static Optional<CoxLootParser.LootBroadcast> clanLoot(String message)
+	private boolean isInRaid()
 	{
-		Optional<CoxLootParser.LootBroadcast> broadcast = CoxLootParser.parseClanBroadcast(message);
-		return broadcast.isPresent() ? broadcast : CoxLootParser.parsePartyLoot(message);
+		return client.getVarbitValue(VarbitID.RAIDS_CLIENT_INDUNGEON) == 1;
 	}
 
 	private boolean isInOwnRaid(String name)
 	{
-		if (client.getVarbitValue(VarbitID.RAIDS_CLIENT_INDUNGEON) != 1)
+		if (!isInRaid())
 		{
 			return false;
 		}
@@ -206,15 +227,11 @@ public class CoxChatCensor
 		{
 			return;
 		}
+		// Refresh even for an already drawn line: the party line is drawn before the clan line that may track it.
 		if (trackedBroadcasts.add(key(loot)))
 		{
 			client.refreshChat();
 		}
-	}
-
-	private boolean isTracked(CoxLootParser.LootBroadcast loot)
-	{
-		return trackedBroadcasts.contains(key(loot));
 	}
 
 	private boolean isLocalPlayer(String name)

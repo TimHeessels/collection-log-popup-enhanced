@@ -16,7 +16,6 @@ import com.snakesteak.collectionlogpopupenhanced.rarity.LocalRarityDatasetLoader
 import com.snakesteak.collectionlogpopupenhanced.rarity.PreviewTier;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResolver;
 import com.snakesteak.collectionlogpopupenhanced.rarity.RarityResult;
-import java.util.Comparator;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -63,10 +62,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	// name>" runs a specific name through the real detection pipeline, kill count correlation
 	// included. Only usable in --developer-mode (the gradle "run" task), not on a hub-installed build.
 	private static final String TEST_COMMAND = "clogtest";
-	// Dev-only, for testing the CoX delay without a raid: "::coxsim <item> [player]" posts the chat
-	// lines a raid end produces, "::coxopen" does what opening the chest does. See TESTING-COX.md.
-	private static final String COX_SIMULATE_COMMAND = "coxsim";
-	private static final String COX_OPEN_COMMAND = "coxopen";
 	private static final String CONFIG_GROUP = "collection-log-popup-enhanced";
 
 	// Matched against VarClientID.NOTIFICATION_TITLE to tell our notification apart from the combat
@@ -614,16 +609,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 	@Subscribe
 	public void onCommandExecuted(CommandExecuted commandExecuted)
 	{
-		if (COX_SIMULATE_COMMAND.equalsIgnoreCase(commandExecuted.getCommand()))
-		{
-			simulateCoxLoot(String.join(" ", commandExecuted.getArguments()));
-			return;
-		}
-		if (COX_OPEN_COMMAND.equalsIgnoreCase(commandExecuted.getCommand()))
-		{
-			revealCoxLoot();
-			return;
-		}
 		if (!TEST_COMMAND.equalsIgnoreCase(commandExecuted.getCommand()))
 		{
 			return;
@@ -660,46 +645,6 @@ public class CollectionLogPopupEnhancedPlugin extends Plugin
 		// which silently truncated them to an item that doesn't exist.
 		String itemName = String.join(" ", args);
 		handleNewCollectionLogItem(null, itemName, true);
-	}
-
-	/**
-	 * Posts the chat lines a CoX completion produces, through the same handlers as the real ones.
-	 * "::coxsim Twisted bow" is your own drop; "::coxsim Twisted bow Some Player" is a teammate's,
-	 * which only gets the party and clan broadcasts - the game messages are only ever your own.
-	 */
-	private void simulateCoxLoot(String arguments)
-	{
-		String lowered = arguments.toLowerCase();
-		String item = CoxLootParser.UNIQUES.stream()
-			.filter(unique -> lowered.startsWith(unique.toLowerCase()))
-			.max(Comparator.comparingInt(String::length))
-			.orElse(null);
-		if (item == null)
-		{
-			// <lt>/<gt> because a bare <...> is parsed as a chat tag and vanishes.
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"Usage: ::coxsim <lt>CoX unique<gt> [player], e.g. ::coxsim Twisted bow. Uniques: "
-					+ String.join(", ", CoxLootParser.UNIQUES), null);
-			return;
-		}
-
-		String localName = client.getLocalPlayer() != null ? Text.removeTags(client.getLocalPlayer().getName()) : "You";
-		String otherName = arguments.substring(item.length()).trim();
-		String player = otherName.isEmpty() ? localName : otherName;
-
-		client.addChatMessage(ChatMessageType.FRIENDSCHATNOTIFICATION, "",
-			"<col=ef1020>" + player + " - " + item + "</col>", null);
-		client.addChatMessage(ChatMessageType.CLAN_MESSAGE, "",
-			player + " received special loot from a raid: " + item + " (1,234,567 coins)", null);
-		client.addChatMessage(ChatMessageType.CLAN_MESSAGE, "",
-			player + " received a new collection log item: " + item + " (975/1717)", null);
-		if (player.equalsIgnoreCase(localName))
-		{
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"<col=ef1020>Valuable drop: " + item + " (1,234,567 coins)</col>", null);
-			client.addChatMessage(ChatMessageType.GAMEMESSAGE, "",
-				"New item added to your collection log: " + item, null);
-		}
 	}
 
 	private void testRandomDatasetItems(int count, boolean holdCox)

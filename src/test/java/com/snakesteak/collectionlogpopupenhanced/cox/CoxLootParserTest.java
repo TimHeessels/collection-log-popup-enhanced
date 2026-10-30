@@ -39,6 +39,23 @@ public class CoxLootParserTest
 	}
 
 	@Test
+	public void parsesThePartyBroadcastJoinedToSpecialLoot()
+	{
+		String message = "<col=ef20ff>Special loot:</col><br><col=ef20ff>Some Player - </col><col=ff0000>Twisted bow</col>";
+		assertEquals(Optional.of(new CoxLootParser.LootBroadcast("Some Player", "Twisted bow")),
+			CoxLootParser.parsePartyLoot(message));
+		assertEquals("<col=ef20ff>Special loot:</col><br><col=ef20ff>Some Player - </col><col=ff0000>???</col>",
+			CoxLootParser.censorItem(message, "Twisted bow"));
+	}
+
+	@Test
+	public void parsesThePartyBroadcastWithAnIconAndRecolouredItem()
+	{
+		assertEquals(Optional.of(new CoxLootParser.LootBroadcast("Some Player", "Twisted bow")),
+			CoxLootParser.parsePartyLoot("<img=2>Some Player - <col=00ff00>Twisted bow</col> (1.2b)"));
+	}
+
+	@Test
 	public void parsesEachClanBroadcast()
 	{
 		CoxLootParser.LootBroadcast expected = new CoxLootParser.LootBroadcast("Some Player", "Kodai insignia");

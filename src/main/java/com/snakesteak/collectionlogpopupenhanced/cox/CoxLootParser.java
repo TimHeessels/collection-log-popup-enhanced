@@ -73,19 +73,26 @@ public final class CoxLootParser
 	 */
 	public static Optional<LootBroadcast> parsePartyLoot(String message)
 	{
-		String item = findUnique(message);
-		if (item == null)
+		if (message == null)
 		{
 			return Optional.empty();
 		}
-
-		String stripped = plain(message).trim();
-		int index = stripped.indexOf(" - " + item);
-		if (index <= 0)
+		// removeTags drops <br> without a space, which would glue "Special loot:" onto the name.
+		for (String line : message.split("<br>"))
 		{
-			return Optional.empty();
+			String item = findUnique(line);
+			if (item == null)
+			{
+				continue;
+			}
+			String stripped = plain(line).trim();
+			int index = stripped.indexOf(" - " + item);
+			if (index > 0)
+			{
+				return Optional.of(new LootBroadcast(stripped.substring(0, index).trim(), item));
+			}
 		}
-		return Optional.of(new LootBroadcast(stripped.substring(0, index).trim(), item));
+		return Optional.empty();
 	}
 
 	/**

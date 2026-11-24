@@ -657,6 +657,8 @@ public class CollectionLogOverlay extends Overlay
 		// above) - capture that as the base transform both animated pieces reset back to between draws.
 		AffineTransform base = graphics.getTransform();
 		Composite originalComposite = graphics.getComposite();
+		// Read before the fold scale: scale(1, 0) on the first frame makes getClip() return null.
+		Shape originalClip = graphics.getClip();
 
 		// --- panel: scaleY-only fold, pivoted at its own center, plus whatever's left of the
 		// fade-out alpha. Corner stats/name/caption are drawn here too so they reveal progressively
@@ -665,7 +667,6 @@ public class CollectionLogOverlay extends Overlay
 		graphics.scale(1.0, foldT);
 		graphics.translate(-panelWidth / 2.0, -panelHeight / 2.0);
 
-		Shape originalClip = graphics.getClip();
 		if (foldRaw < 1f)
 		{
 			// Still folding - clip to the panel's own (already scaled) bounds so nothing draws
@@ -685,9 +686,9 @@ public class CollectionLogOverlay extends Overlay
 			drawPanelContent(graphics, originalComposite, fadeAlpha);
 		}
 
+		graphics.setTransform(base);
 		graphics.setClip(originalClip);
 		graphics.setComposite(originalComposite);
-		graphics.setTransform(base);
 
 		RarityEffects.Frame effects = effectsFrame(now, elapsed, fadeAlpha);
 		if (effects != null)
@@ -876,10 +877,9 @@ public class CollectionLogOverlay extends Overlay
 		}
 	}
 
-	// Neutral art carries no tier colour, so the caption names the tier instead.
 	private String caption()
 	{
-		return config.panelStyle() == PanelStyle.NEUTRAL
+		return config.showRarityInCaption()
 			? current.getTier().getLabel() + " " + CAPTION_TEXT
 			: CAPTION_TEXT;
 	}

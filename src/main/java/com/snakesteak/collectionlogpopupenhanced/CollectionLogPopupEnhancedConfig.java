@@ -393,6 +393,18 @@ public interface CollectionLogPopupEnhancedConfig extends Config
 	}
 
 	@ConfigItem(
+		keyName = "showRarityInCaption",
+		name = "Show rarity in title",
+		description = "Prefix the Collection Log title with the rarity tier, e.g. \"Rare Collection Log\"",
+		position = 7,
+		section = appearanceSection
+	)
+	default boolean showRarityInCaption()
+	{
+		return true;
+	}
+
+	@ConfigItem(
 		keyName = "panelStyle",
 		name = "Panel style",
 		description = "Colourful tints the panel with the tier colour, neutral keeps the plain OSRS-style art, audio only keeps the game's own popup and just plays the sound",
